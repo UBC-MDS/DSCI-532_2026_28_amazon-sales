@@ -2,33 +2,23 @@
 
 ## Expectations
 
-Each team member is expected to contribute approximately **three hours** toward the project each week, including the lab session. Work will be divided into four parts, and members will select the tasks they feel most comfortable with. All deliverables should follow the project instructions carefully, including clear writing, accurate analysis, and complete updates to the GitHub repository.
+Each team member is expected to contribute approximately **three hours** toward the project each week, including the lab session. Work will be divided into three parts, and members will select the tasks they feel most comfortable with. All deliverables should follow the project instructions carefully, including clear writing, accurate analysis, and complete updates to the GitHub repository.
 
 If a team member anticipates difficulty completing their portion on time, they must communicate with the group **at least half a day before the meeting** so work can be adjusted if needed.
 
 ## Meetings
 
-Meeting times were agreed on during our first team discussion. The team will meet on the following schedule if needed:
+Meeting times were agreed on during our first team discussion. The team will meet on the following schedule:
 
--   **Thursday:** 1:00 PM – 2:00 PM
+-   **Thursday:** 2:00 PM – 3:30 PM
 
 ### Meeting Plan
 
--   **First Meeting (\~2 hours):**
+-   Finalize the work contract
 
-    -   Finalize the work contract
+-   Divide tasks
 
-    -   Divide tasks
-
-    -   Outline what must be completed before the next meeting
-
--   **Second Meeting (\~1 hour):**
-
-    -   Combine individual work
-
-    -   Discuss any issues or challenges
-
-    -   Confirm submission timing and finalize the project
+-   Outline what must be completed before the next meeting
 
 All members are expected to attend meetings. If someone cannot attend, they must provide written notice at least half a day beforehand.
 

@@ -6,15 +6,13 @@
 
 **Problem:** The company currently lacks clear insight into regional and seasonal demand patterns. This data gap leads to a cycle of **overstocking** (wasted capital and high storage fees) or **understocking** (lost revenue and damaged search rankings). Without data-driven forecasting, the business suffers from inconsistent cash flow and unpredictable profit margins.
 
-**Solution:** The proposed dashboard will transform historical Amazon sales data into a strategic planning tool. By visualizing trends across **Regions**, **Categories**, and **Order Dates**, the dashboard will help the user synchronize procurement with seasonal peaks and optimize stock distribution to maximize profit.
+**Solution:** The proposed dashboard will transform historical Amazon sales data into a strategic planning tool. By visualizing trends of quantity or revenue across **Regions**, **Categories**, and **Order Dates**, the dashboard will help the user synchronize procurement with seasonal peaks and optimize stock distribution to maximize profit.
 
 ## Section 2: Description of the Data
 
 Place holder
 
 ## Section 3: Research Questions & Usage Scenarios
-
-rubric={reasoning:10}
 
 ### Personas
 
