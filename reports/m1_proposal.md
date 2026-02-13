@@ -8,7 +8,9 @@
 
 **Solution:** The proposed dashboard will transform historical Amazon sales data into a strategic planning tool. By visualizing trends across **Regions**, **Categories**, and **Order Dates**, the dashboard will help the user synchronize procurement with seasonal peaks and optimize stock distribution to maximize profit.
 
-## 
+## Section 2: Description of the Data
+
+Place holder
 
 ## Section 3: Research Questions & Usage Scenarios
 
@@ -41,6 +43,10 @@ The Strategy Director wants to know if "Electronics" is a dying category. They l
 1.  **Smart Ordering:** As an inventory manager, I want to see **Quantity Sold** for a specific season so I don't overstock or understock.
 2.  **Location Tracking:** As a logistics lead, I want to filter sales by **Region** so I can put inventory closer to the customers who buy it.
 3.  **Trend Spotting:** As a director, I want to see the **Total Sales** trend over several years so I can identify which products are actually growing.
+
+## Section 4: Exploratory Data Analysis
+
+Place holder
 
 ## Section 5: App Sketch & Description
 
