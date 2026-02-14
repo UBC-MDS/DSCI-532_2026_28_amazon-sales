@@ -14,14 +14,9 @@
 
 The dataset contains 50,000 rows and 13 columns. Each row represents an individual Amazon order record.
 
-The dataset includes:
-- Order information (`order_id`, `order_date`)
-- Product details (`product_id`, `product_category`, `price`, etc)
-- Sales performance (`quantity_sold`, `total_revenue`, `rating`, `review_count`)
-- Customer & transaction info (`customer_region`, `payment_method`)
+The dataset includes: - Order information (`order_id`, `order_date`) - Product details (`product_id`, `product_category`, `price`, etc) - Sales performance (`quantity_sold`, `total_revenue`, `rating`, `review_count`) - Customer & transaction info (`customer_region`, `payment_method`)
 
-The data spans from December 31, 2021 to December 30, 2023 based on the `order_date`, covering approximately three years.
-The geographic scope is defined by the `customer_region`, including regions such as Asia, North America, Middle East, and Europe.
+The data spans from December 31, 2021 to December 30, 2023 based on the `order_date`, covering approximately three years. The geographic scope is defined by the `customer_region`, including regions such as Asia, North America, Middle East, and Europe.
 
 ### Relevance to the Problem
 
@@ -32,10 +27,10 @@ Relevant variables include `order_date`, which helps identify how demand changes
 ### Personas
 
 | Persona | Role | Focus | Dashboard Feature |
-|:-----------------|:-----------------|:-----------------|:-----------------|
-| **Seasonal Planner** | Inventory Manager | Ordering the right stock for peaks | **Seasonal Sub-plots** (Bottom Left/Middle) |
-| **Regional Lead** | Logistics Manager | Moving stock to the busiest warehouses. | **Regional Map** (Bottom Right) |
-| **Strategy Director** | Product Lead | Spotting long-term growth for new products. | **Main Trend Chart** (Top Row) |
+|:---|:---|:---|:---|
+| **Seasonal Planner** | Inventory Manager | Ordering the right stock for peaks | **Seasonal Sub-plots** |
+| **Regional Lead** | Logistics Manager | Moving stock to the busiest warehouses. | **Regional Map** |
+| **Strategy Director** | Product Lead | Spotting long-term growth for new products. | **Main Trend Chart** |
 
 ### Usage Scenarios
 
@@ -67,23 +62,32 @@ Place holder
 
 ![Sketch](../img/sketch.png)
 
-### Interface Description
+### Interface Description: Control Impact Matrix
+
+The following table outlines the interaction logic for each dashboard control and which specific visualizations are updated upon selection.
+
+| Control | Affects |
+|:---|:---|
+| **Time Slider** | KPI Section, Trend Chart, Sales by Region (Map), Average Sales by Season, Revenue by Payment Method |
+| **Category** (Multi-select, Max 3) | KPI Section, Trend Chart, Sales by Region (Map), Average Sales by Season, Revenue by Payment Method |
+| **Region** (Multi-select) | KPI Section, Trend Chart, Sales by Region (Map), Average Sales by Season, Revenue by Payment Method |
+| **Metric** (Revenue / Quantity / Avg Order) | Trend Chart, Sales by Region (Map) |
+| **3-Month Rolling Average** | Trend Chart (Only) |
+
+------------------------------------------------------------------------
 
 ### Interaction Logic
 
--   The user sets the top filters `Metric`, `Catergory` and Timeframe to see the "Big Picture."
--   They then use the `Season` and `customer_region` selectors at the bottom to drill down (e.g., "Show me the *Revenue* for *Winter* in the *North* region").
+The dashboard is designed with a **Top-Down** discovery flow. Users set high-level parameters (Metric, Category, Timeframe) at the top to see the "Big Picture" before using specific selectors to drill down into seasonal and regional performance.
 
 **The 9 Functional Components:**
 
-1.  **Category Dropdown:** Filters the entire dashboard to a specific `product_category` (e.g., `Fashion` & `Beauty`).
-2.  **Metric Switch:** A dropdown to toggle all charts between `quantity_sold` (Logistics View) and `total_revenue` (Financial View).
-3.  **Timeframe Slider:** Sets the specific year range for the analysis (e.g., "2022-2025").
-4.  **Main Trend Chart (Top):** A broad bar chart showing the trend of the selected `Metric` and `Catergory` over the selected `Timeframe`.
-5.  **Season Selector:** Filters the bottom row to focus on a specific `Season` (e.g., "Summer").
-6.  **Region Selector:** Filters the bottom row to focus on a specific `customer_region` (e.g., "Asia").
-7.  **Seasonal Sub-plots (Bar):** Shows the exact Quantity/Revenue for the selected season.
-8.  **Seasonal Sub-plots (Pie):** Shows the selected season's contribution % to the yearly total.
-9.  **Regional Map:** Visualizes the geographic density of the selected `Metric`, `Catergory`, `Season` and `customer_region`.
-
-### 
+1.  **Category Dropdown:** Filters the entire dashboard to specific product categories (e.g., *Fashion* & *Beauty*).
+2.  **Metric Switch:** A toggle to update charts between `quantity_sold` (Logistics View), `total_revenue` (Financial View), or `avg_order_value`.
+3.  **Timeframe Slider:** Sets the specific date range for the analysis (e.g., "2022–2025").
+4.  **Main Trend Chart:** A bar/line chart showing the trend of the selected Metric and Category over time. Includes a **3-Month Rolling Average** toggle to smooth out volatility.
+5.  **Season Selector:** Filters the bottom-row visualizations to focus on specific time segments (e.g., *Winter*).
+6.  **Region Selector:** Filters the dashboard to focus on specific geographic areas (e.g., *Asia*).
+7.  **Average Sales by Season (Bar):** Compares performance across different times of the year to identify peak demand.
+8.  **Revenue by Payment Method (Pie):** Breaks down transaction types, assisting in financial reconciliation and payment preference analysis.
+9.  **Regional Map:** A geographic heatmap visualizing the density of the selected Metric and Category across the globe.
