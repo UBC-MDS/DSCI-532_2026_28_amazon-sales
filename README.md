@@ -33,7 +33,13 @@ This interactive Amazon Sales Dashboard enables users to explore sales performan
 
 2. Open the URL shown in the terminal (e.g., `http://127.0.0.1:8000`) in your browser to access the dashboard.
 
+
 ## Data Source
 
-The dataset used in this project is the *Amazon Sales Dataset* from Kaggle:  
-https://www.kaggle.com/datasets/aliiihussain/amazon-sales-dataset/data
+- Dataset: Amazon Sales Dataset
+- Source: Kaggle
+- Link: https://www.kaggle.com/datasets/aliihussain/amazon-sales-dataset
+- Stored locally in: `data/raw/amazon_sales_dataset.csv`
+- Size: ~4.2 MB
+
+The dataset is included in the repository for reproducibility. No external download is required.
