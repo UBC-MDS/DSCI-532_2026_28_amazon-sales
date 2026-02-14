@@ -54,7 +54,29 @@ The Strategy Director wants to know if "Electronics" is a dying category. They l
 
 ## Section 4: Exploratory Data Analysis
 
-Place holder
+To address **User Story 3 (Trend Spotting)**, we analyzed total monthly sales across product categories for 2022–2023.
+
+### Analysis
+
+The time-series visualization in `notebooks/eda_analysis.ipynb` shows that while average monthly sales levels are relatively similar across categories (approximately **\$225k–\$231k per month**), volatility differs noticeably.
+
+For example:
+
+-   **Sports** and **Home & Kitchen** exhibit higher month-to-month fluctuations.
+-   **Books** remains comparatively more stable over time.
+-   Seasonal peaks are visible across multiple categories, confirming that demand varies throughout the year.
+
+### Reflection
+
+These findings support the inclusion of a **multi-category trend visualization** in the dashboard.
+
+By enabling the *Strategy Director* to view category performance over time, the dashboard allows identification of:
+
+-   Seasonal demand patterns\
+-   Relative category stability\
+-   Potential performance shifts
+
+This confirms that the dataset contains sufficient temporal variation to justify a dynamic time-series component for strategic decision-making.
 
 ## Section 5: App Sketch & Description
 
