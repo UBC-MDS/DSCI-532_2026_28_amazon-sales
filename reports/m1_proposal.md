@@ -10,7 +10,22 @@
 
 ## Section 2: Description of the Data
 
-Place holder
+### Dataset Overview
+
+The dataset contains 50,000 rows and 13 columns. Each row represents an individual Amazon order record.
+
+The dataset includes:
+- Order information (`order_id`, `order_date`)
+- Product details (`product_id`, `product_category`, `price`, etc)
+- Sales performance (`quantity_sold`, `total_revenue`, `rating`, `review_count`)
+- Customer & transaction info (`customer_region`, `payment_method`)
+
+The data spans from December 31, 2021 to December 30, 2023 based on the `order_date`, covering approximately three years.
+The geographic scope is defined by the `customer_region`, including regions such as Asia, North America, Middle East, and Europe.
+
+### Relevance to the Problem
+
+Relevant variables include `order_date`, which helps identify how demand changes over time, including yearly and seasonal patterns. They also include `customer_region` for analyzing regional differences and `product_category` for tracking performance across product groups. In addition, `quantity_sold` and `total_revenue` measure actual demand.
 
 ## Section 3: Research Questions & Usage Scenarios
 
