@@ -1,6 +1,11 @@
-# DSCI-532_2026_28_appname
+# DSCI-532_2026_28_amazon-sales
 
 This interactive Amazon Sales Dashboard enables users to explore sales performance across time, product categories, customer regions, and payment methods through dynamic filters and visualizations. Key performance indicators (KPIs), trend analysis, and comparative charts provide insights into revenue, quantity sold, and average order value. The dashboard is designed to support data-driven decision-making through clear and responsive visual analytics.
+
+## Live App
+
+- **Stable version:** https://019c9c01-1af7-f607-72fa-383befa69b41.share.connect.posit.cloud/
+- **Preview version:** https://019c9c06-2d43-6775-4b46-85423c0e732c.share.connect.posit.cloud/
 
 ## Environment Setup
 
