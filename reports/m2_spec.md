@@ -99,3 +99,17 @@ flowchart TB
   E --> P4
   H --> P4
 ```
+
+## 2.4 Calculation Details
+
+### 1. filtered_df
+
+- Inputs it depends on: `input_year` (year), `input_month` (month), `input_category` (product category), and `input_region` (customer region).
+- Transformation: Filters the original dataset to retain only rows that match the selected year(s), month(s), product category(ies), and customer region(s).
+- Outputs: `plot_map`, `plot_trend`, `plot_season`, `payment_method_bar`, and `kpi`.
+
+### 2. kpi
+
+- Inputs it depends on: `filtered_df`.
+- Transformation: Computes aggregated summary statistics (e.g., total revenue and total number of orders) based on the filtered dataset.
+- Outputs: `valuebox_revenue` (total revenue) and `valuebox_orders` (total number of orders).
