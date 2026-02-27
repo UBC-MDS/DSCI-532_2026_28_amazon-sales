@@ -23,7 +23,7 @@ app_ui = ui.page_fluid(
 
             ui.input_slider(
                 id="input_year",
-                label="Select Year Range",
+                label="Years",
                 min=min_year, 
                 max=max_year, 
                 value=(min_year, max_year),
@@ -33,7 +33,7 @@ app_ui = ui.page_fluid(
 
             ui.input_selectize(
                 id="input_month",
-                label="Select Months",
+                label="Months",
                 choices={
                     1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 
                     5: "May", 6: "Jun", 7: "Jul", 8: "Aug", 
@@ -45,7 +45,7 @@ app_ui = ui.page_fluid(
 
             ui.input_selectize(
                 id="input_category",
-                label="Product Category (Max 3)",
+                label="Categories (Max 3)",
                 choices=categories,
                 selected=default_category,
                 multiple=True,
@@ -54,20 +54,20 @@ app_ui = ui.page_fluid(
 
             ui.input_switch(
                 id="input_aggregate",
-                label="Aggregate Category Trend",
+                label="Compare to Aggregate",
                 value=False,
             ),
 
             ui.input_checkbox_group(
                 id="input_region",
-                label="Region",
+                label="Regions",
                 choices=regions,
                 selected=regions,
             ),
             
             ui.input_radio_buttons(
                 id="input_metric",
-                label="Metric",
+                label="Primary Metric",
                 choices={
                     "total_revenue": "Revenue",
                     "quantity_sold": "Quantity Sold",
@@ -129,6 +129,21 @@ app_ui = ui.page_fluid(
             col_widths=(6, 6),
         ),
     ),
+    # Footer
+    ui.tags.footer(
+        ui.HTML(
+            """
+            <div style="text-align: center; margin-top: 30px; margin-bottom: 20px; padding-top: 15px; border-top: 1px solid #e5e5e5; color: #6c757d; font-size: 0.9em;">
+                <p style="margin-bottom: 5px;"><strong>Amazon Sales Dashboard:</strong> An interactive tool for exploring product trends, regional performance, and seasonal sales patterns.</p>
+                <p style="margin-bottom: 5px;"><strong>Authors:</strong> Hoi Hin Kwok, Yanxin Liang, Eduardo Sanchez</p>
+                <p style="margin-bottom: 0;">
+                    <a href="https://github.com/UBC-MDS/DSCI_524_group_25" target="_blank" style="color: #0d6efd; text-decoration: none;">GitHub Repository</a> 
+                    | Last Updated: Feb 2026
+                </p>
+            </div>
+            """
+        )
+    )
 )
 
 
