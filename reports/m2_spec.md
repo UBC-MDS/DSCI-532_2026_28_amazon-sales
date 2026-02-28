@@ -49,3 +49,67 @@ The following outputs consume reactive calculations and update dynamically based
 | plot_map | Output | `@render.plot` | `filtered_df`, `input_metric` | #2 |
 | plot_season | Output | `@render.plot` | `filtered_df`, `input_metric`, `input_season` | #1 |
 | payment_method_bar | Output | `@render.plot` | `filtered_df` | #3 |
+
+
+## 2.3 Reactivity Diagram
+
+```mermaid
+flowchart TB
+  %% Filters (left) 
+  subgraph S1[Filters]
+    A[/input_year/]
+    B[/input_month/]
+    C[/input_category/]
+    D[/input_region/]
+  end
+
+
+  F{{filtered_df}}
+
+  A --> F
+  B --> F
+  C --> F
+  D --> F
+
+  %% KPI 
+  K{{kpi}}
+  F --> K
+  K --> V1([valuebox_revenue])
+  K --> V2([valuebox_orders])
+  
+  
+  %% Charts 
+  F --> P1([payment_method_bar])
+  F --> P2([plot_map])
+  F --> P3([plot_trend])
+  F --> P4([plot_season])
+
+  %%  Plot controls (right)
+  subgraph S2[Plot controls]
+    H[/input_season/]
+    G[/input_aggregate/]
+    E[/input_metric/]
+    
+    
+  end
+
+  E --> P2
+  E --> P3
+  G --> P3
+  E --> P4
+  H --> P4
+```
+
+## 2.4 Calculation Details
+
+### 1. filtered_df
+
+- Inputs it depends on: `input_year` (year), `input_month` (month), `input_category` (product category), and `input_region` (customer region).
+- Transformation: Filters the original dataset to retain only rows that match the selected year(s), month(s), product category(ies), and customer region(s).
+- Outputs: `plot_map`, `plot_trend`, `plot_season`, `payment_method_bar`, and `kpi`.
+
+### 2. kpi
+
+- Inputs it depends on: `filtered_df`.
+- Transformation: Computes aggregated summary statistics (e.g., total revenue and total number of orders) based on the filtered dataset.
+- Outputs: `valuebox_revenue` (total revenue) and `valuebox_orders` (total number of orders).
