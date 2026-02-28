@@ -1,8 +1,10 @@
 from shiny import App, ui, reactive, render
+from shinywidgets import output_widget, render_widget
 import pandas as pd
 from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
+import plotly.express as px
 from matplotlib.ticker import FuncFormatter
 
 DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "raw" / "amazon_sales_dataset.csv"
@@ -18,6 +20,25 @@ default_category = categories[0]
 
 # for input_region
 regions = sorted(df["customer_region"].dropna().unique().tolist())
+
+# for plot_map
+REGION_MAPPING = {
+        "Asia": [
+            "China", "India", "Japan", "South Korea", "Vietnam", "Thailand", 
+            "Indonesia", "Malaysia", "Philippines", "Singapore", "Taiwan"
+        ],
+        "Europe": [
+            "Germany", "France", "United Kingdom", "Italy", "Spain", "Netherlands", 
+            "Belgium", "Switzerland", "Sweden", "Norway", "Poland", "Portugal"
+        ],
+        "Middle East": [
+            "Saudi Arabia", "United Arab Emirates", "Israel", "Turkey", "Qatar", 
+            "Kuwait", "Jordan", "Oman", "Lebanon"
+        ],
+        "North America": [
+            "United States", "Canada", "Mexico"
+        ]
+    }
 
 app_ui = ui.page_fluid(
     ui.panel_title("Amazon Sales Dashboard"),
@@ -111,7 +132,7 @@ app_ui = ui.page_fluid(
             ),
             ui.card(
                 ui.card_header("Sales by Region"),
-                ui.output_plot("plot_map"),
+                output_widget("plot_map"),
             ),
             col_widths=(6, 6),
         ),
@@ -258,30 +279,83 @@ def server(input, output, session):
 
     # --- "Map" placeholder (reactive summary by region) ---
     @output
-    @render.plot
+    @render_widget 
     def plot_map():
         d = filtered_df()
         metric = _metric_col()
-
-        fig, ax = plt.subplots(figsize=(6, 4))
+        
+        # Create a clean label for the tooltip
+        metric_label = "Total Revenue" if metric == "total_revenue" else "Total Orders"
+        
         if d.empty:
-            ax.set_title("Sales by Region")
-            ax.text(0.5, 0.5, "No data for selected filters", ha="center", va="center")
-            ax.axis("off")
+            fig = px.choropleth(scope="world")
+            fig.update_layout(title="No data for selected filters", margin={"r":0,"t":40,"l":0,"b":0})
             return fig
 
-        region_summary = (
-            d.groupby("customer_region", as_index=False)[metric]
-             .sum()
-             .sort_values(metric, ascending=True)
+        # 1. Aggregate your data by the custom regions
+        region_summary = d.groupby("customer_region", as_index=False)[metric].sum()
+
+        map_data = [] 
+
+        # 2. Map data and format the numbers for the tooltip
+        for _, row in region_summary.iterrows():
+            region_name = row["customer_region"]
+            value = row[metric]
+            
+            # Format as currency or standard number
+            if metric == "total_revenue":
+                formatted_val = f"${value:,.2f}"
+            else:
+                formatted_val = f"{value:,.0f}"
+
+            if region_name in REGION_MAPPING:
+                for country in REGION_MAPPING[region_name]:
+                    map_data.append({
+                        "Country": country, 
+                        "Region": region_name, 
+                        metric_label: formatted_val
+                    })
+        
+        if not map_data:
+            fig = px.choropleth(scope="world")
+            fig.update_layout(title="No mapped countries for selected regions", margin={"r":0,"t":40,"l":0,"b":0})
+            return fig
+
+        plot_df = pd.DataFrame(map_data)
+
+        # 3. Create the Categorical Map
+        fig = px.choropleth(
+            plot_df,
+            locations="Country",
+            locationmode="country names",
+            color="Region",  # <--- CHANGED: Colors by Region category instead of Value
+            hover_name="Region", # <--- Sets the bold title of the tooltip to the Region
+            hover_data={
+                "Country": False,  # <--- Hides the specific country name
+                "Region": False,   # Hides the redundant region row
+                metric_label: True # Shows our formatted metric
+            },
+            color_discrete_sequence=px.colors.qualitative.Pastel, # Distinct, visually pleasing colors
+            scope="world"
         )
 
-        ax.barh(region_summary["customer_region"], region_summary[metric])
-        ax.set_title("Sales by Region")
-        ax.set_xlabel("Revenue" if metric == "total_revenue" else "Quantity Sold")
-        fig.tight_layout()
-        return fig
+        # 4. Background and Constant Zoom
+        fig.update_geos(
+            showcountries=True, 
+            countrycolor="White", # Makes borders cleaner between colored blocks
+            showocean=True, 
+            oceancolor="#f0f8ff", # Very light blue for ocean
+            projection_type="equirectangular"
+        )
 
+        fig.update_layout(
+            margin={"r":0,"t":0,"l":0,"b":0},
+            dragmode=False, 
+            legend_title_text="Regions" # Updates the legend title
+        )
+        
+        return fig
+    
     # --- Season plot (reactive; shown only when input_season is ON in UI) ---
     @output
     @render.plot
