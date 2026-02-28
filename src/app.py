@@ -3,6 +3,7 @@ import pandas as pd
 from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.ticker import FuncFormatter
 
 DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "raw" / "amazon_sales_dataset.csv"
 df = pd.read_csv(DATA_PATH, parse_dates=["order_date"])
@@ -105,7 +106,7 @@ app_ui = ui.page_fluid(
         # 2. Middle Row
         ui.layout_columns(
             ui.card(
-                ui.card_header("Trend Chart"),
+                ui.output_ui("trend_header"),
                 ui.output_plot("plot_trend"),
             ),
             ui.card(
@@ -120,12 +121,12 @@ app_ui = ui.page_fluid(
             ui.panel_conditional(
                 "input.input_season", 
                 ui.card(
-                    ui.card_header("Average Sales by Season"),
+                    ui.output_ui("season_header"),
                     ui.output_plot("plot_season"),
                 ),
             ),
             ui.card(
-                ui.card_header("Revenue by Payment Method"),
+                ui.output_ui("payment_header"),
                 ui.output_plot("payment_method_bar"),
             ),
             col_widths=(6, 6),
@@ -232,17 +233,24 @@ def server(input, output, session):
               .sort_values("month_start")
         )
 
-        fig, ax = plt.subplots(figsize=(9, 4))
+        fig, ax = plt.subplots(constrained_layout=True)
         for cat, g in by_cat.groupby("product_category"):
             ax.plot(g["month_start"], g[metric], marker="o", linewidth=1, label=str(cat))
 
         if input.input_aggregate():
             overall = d2.groupby("month_start", as_index=False)[metric].sum().sort_values("month_start")
             ax.plot(overall["month_start"], overall[metric], linewidth=2, label="Aggregate")
+        
+        if metric == "total_revenue":
+            ax.set_ylabel("Total revenue (USD)")
+            ax.yaxis.set_major_formatter(FuncFormatter(lambda x, pos: f"${x:,.0f}"))
 
-        ax.set_title("Monthly Trend by Category")
+        else:
+            ax.set_ylabel("Total quantity sold (units)")
+
         ax.set_xlabel("Month")
-        ax.set_ylabel("Revenue" if metric == "total_revenue" else "Quantity Sold")
+        ax.set_xlabel("Month")
+        
         ax.tick_params(axis="x", rotation=45)
         ax.legend(loc="best", fontsize=8)
         fig.tight_layout()
@@ -281,7 +289,7 @@ def server(input, output, session):
         d = filtered_df()
         metric = _metric_col()
 
-        fig, ax = plt.subplots(figsize=(8, 4))
+        fig, ax = plt.subplots(constrained_layout=True)
         if d.empty:
             ax.set_title("Average Sales by Season")
             ax.text(0.5, 0.5, "No data for selected filters", ha="center", va="center")
@@ -319,10 +327,16 @@ def server(input, output, session):
                 vals.append(float(row[metric].iloc[0]) if not row.empty else 0.0)
             ax.bar(x + i * width, vals, width=width, label=str(cat))
 
+        if metric == "total_revenue":
+            ax.set_xlabel("Season")
+            ax.set_ylabel("Average revenue (USD)")
+            ax.yaxis.set_major_formatter(FuncFormatter(lambda x, pos: f"${x:,.0f}"))
+        else:
+            ax.set_xlabel("Season")
+            ax.set_ylabel("Average quantity sold (units)")
+
         ax.set_xticks(x + width * (len(cats) - 1) / 2 if len(cats) else x)
         ax.set_xticklabels(seasons)
-        ax.set_title("Average Sales by Season")
-        ax.set_ylabel("Avg Revenue" if metric == "total_revenue" else "Avg Quantity Sold")
         ax.legend(fontsize=8)
         fig.tight_layout()
         return fig
@@ -333,7 +347,7 @@ def server(input, output, session):
     def payment_method_bar():
         d = filtered_df()
 
-        fig, ax = plt.subplots(figsize=(6, 4))
+        fig, ax = plt.subplots(constrained_layout=True)
         if d.empty:
             ax.set_title("Revenue by Payment Method")
             ax.text(0.5, 0.5, "No data for selected filters", ha="center", va="center")
@@ -347,11 +361,33 @@ def server(input, output, session):
         )
 
         ax.bar(pm["payment_method"], pm["total_revenue"])
-        ax.set_title("Revenue by Payment Method")
-        ax.set_ylabel("Revenue")
+        ax.set_xlabel("Payment Method")
+        ax.set_ylabel("Total revenue (USD)")
+        ax.yaxis.set_major_formatter(FuncFormatter(lambda x, pos: f"${x:,.0f}"))
         ax.tick_params(axis="x", rotation=20)
         fig.tight_layout()
         return fig
+    
+    #add dynamic header for plot to show selected metric
+    @output
+    @render.ui
+    def trend_header():
+        if input.input_metric() == "total_revenue":
+            return ui.card_header("Monthly Revenue Trend by Product Category")
+        else:
+            return ui.card_header("Monthly Quantity Sold Trend by Product Category")
 
+    @output
+    @render.ui
+    def season_header():
+        if input.input_metric() == "total_revenue":
+            return ui.card_header("Average Revenue by Season")
+        else:
+            return ui.card_header("Average Quantity Sold by Season")
+
+    @output
+    @render.ui
+    def payment_header():
+        return ui.card_header("Total Revenue by Payment Method")
 
 app = App(app_ui, server)
