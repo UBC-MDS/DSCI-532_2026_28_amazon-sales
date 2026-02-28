@@ -131,7 +131,7 @@ app_ui = ui.page_fluid(
                 ui.output_plot("plot_trend"),
             ),
             ui.card(
-                ui.card_header("Sales by Region"),
+                ui.card_header("Selected Regions"),
                 output_widget("plot_map"),
             ),
             col_widths=(6, 6),
