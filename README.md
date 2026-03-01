@@ -4,7 +4,7 @@ This interactive Amazon Sales Dashboard enables users to explore sales performan
 
 ## Live App
 
-- **Stable version:** https://019c9c01-1af7-f607-72fa-383befa69b41.share.connect.posit.cloud/
+- **Stable version:** [https://019c9c01-1af7-f607-72fa-383befa69b41.share.connect.posit.cloud/](https://019ca71b-1cff-0f9a-8c6a-09744690589a.share.connect.posit.cloud/)
 - **Preview version:** https://019c9c06-2d43-6775-4b46-85423c0e732c.share.connect.posit.cloud/
 
 ## Motivation
