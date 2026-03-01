@@ -19,8 +19,6 @@ Business stakeholders often need to monitor revenue trends, compare regional per
 
 ## Demo
 
-<!-- Replace once you add demo.gif or demo.mp4 -->
-
 ![Dashboard Demo](img/demo.gif)
 
 The demo above shows a full interaction cycle: adjusting filters and observing reactive updates across KPIs and visualizations.
