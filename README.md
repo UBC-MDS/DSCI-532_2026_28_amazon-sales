@@ -1,8 +1,51 @@
-# DSCI-532_2026_28_appname
+# Amazon Sales Dashboard
 
 This interactive Amazon Sales Dashboard enables users to explore sales performance across time, product categories, customer regions, and payment methods through dynamic filters and visualizations. Key performance indicators (KPIs), trend analysis, and comparative charts provide insights into revenue, quantity sold, and average order value. The dashboard is designed to support data-driven decision-making through clear and responsive visual analytics.
 
-## Environment Setup
+## Live App
+
+- **Stable version:** https://019c9c01-1af7-f607-72fa-383befa69b41.share.connect.posit.cloud/
+- **Preview version:** https://019c9c06-2d43-6775-4b46-85423c0e732c.share.connect.posit.cloud/
+
+## Motivation
+
+Business stakeholders often need to monitor revenue trends, compare regional performance, and evaluate category-level sales over time. This dashboard enables users to:
+
+- Track total revenue, orders, and average order value
+- Compare monthly trends across product categories
+- Analyze sales by region
+- Explore the impact of payment methods
+- Interactively filter data to support targeted insights
+
+## Demo
+
+![Dashboard Demo](img/demo.gif)
+
+The demo above shows a full interaction cycle: adjusting filters and observing reactive updates across KPIs and visualizations.
+
+## Key Features
+
+- Reactive filtering by time, region, category, and payment method
+- KPI value boxes summarizing performance
+- Trend analysis visualizations
+- Comparative regional charts
+- Clean and responsive dashboard layout
+
+## Tech Stack
+
+- Shiny for Python
+- Plotly
+- Pandas
+- Conda environment management
+- Posit Connect Cloud deployment
+
+## For Users
+
+Simply visit the **stable deployment link** above to explore the dashboard (No installation required)
+
+## For Contributors
+
+### Environment Setup
 
 1. Clone this repository:
 
@@ -23,7 +66,7 @@ This interactive Amazon Sales Dashboard enables users to explore sales performan
     conda activate amazon-sales-dashboard
     ```
 
-## Running the Dashboard Locally
+### Running the Dashboard Locally
 
 1. Run the app from the project root:
 
@@ -33,6 +76,7 @@ This interactive Amazon Sales Dashboard enables users to explore sales performan
 
 2. Open the URL shown in the terminal (e.g., `http://127.0.0.1:8000`) in your browser to access the dashboard.
 
+For contribution guidelines and development workflow details, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Data Source
 
