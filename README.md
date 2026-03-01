@@ -76,6 +76,8 @@ Simply visit the **stable deployment link** above to explore the dashboard (No i
 
 2. Open the URL shown in the terminal (e.g., `http://127.0.0.1:8000`) in your browser to access the dashboard.
 
+For contribution guidelines and development workflow details, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Data Source
 
 - Dataset: Amazon Sales Dataset
