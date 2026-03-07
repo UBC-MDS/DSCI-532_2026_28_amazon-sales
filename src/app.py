@@ -240,6 +240,77 @@ def server(input, output, session):
             d = d[d["customer_region"].isin(regs)]
 
         return d
+    
+    def parse_query_rule_based(query: str):
+        query = query.lower().strip()
+
+        filters = {
+            "categories": [],
+            "regions": [],
+            "years": [],
+            "payment_methods": [],
+        }
+
+        for cat in categories:
+            if cat.lower() in query:
+                filters["categories"].append(cat)
+
+        for region in regions:
+            if region.lower() in query:
+                filters["regions"].append(region)
+
+        for year in range(min_year, max_year + 1):
+            if str(year) in query:
+                filters["years"].append(year)
+
+        payment_methods = sorted(df["payment_method"].dropna().unique().tolist())
+        for pm in payment_methods:
+            if pm.lower() in query:
+                filters["payment_methods"].append(pm)
+
+        return filters
+
+
+    @reactive.effect
+    @reactive.event(input.run_ai_query)
+    def _run_ai_query():
+        query = input.ai_query().strip()
+
+        if not query:
+            ai_df_store.set(df.copy())
+            ai_status_store.set("No query entered. Showing full dataset.")
+            return
+
+        filters = parse_query_rule_based(query)
+        d = df.copy()
+
+        if filters["years"]:
+            d = d[d["order_date"].dt.year.isin(filters["years"])]
+
+        if filters["categories"]:
+            d = d[d["product_category"].isin(filters["categories"])]
+
+        if filters["regions"]:
+            d = d[d["customer_region"].isin(filters["regions"])]
+
+        if filters["payment_methods"]:
+            d = d[d["payment_method"].isin(filters["payment_methods"])]
+
+        ai_df_store.set(d)
+        ai_status_store.set(f"Matched {len(d):,} rows.")
+
+
+    #--- Chatbot DF output ---
+    @output
+    @render.text
+    def ai_status():
+        return ai_status_store()
+
+    @output
+    @render.data_frame
+    def ai_filtered_table():
+        return render.DataGrid(ai_df_store(), filters=True)
+    
 
     # --- shared KPI calc consumed by multiple outputs ---
     @reactive.calc
@@ -255,6 +326,7 @@ def server(input, output, session):
             "total_orders": total_orders,
             "avg_order_value": avg_order_value,
         }
+    
 
     # --- KPI outputs (2 outputs consuming same reactive calc) ---
     @output
