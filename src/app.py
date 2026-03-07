@@ -251,12 +251,22 @@ def server(input, output, session):
             "payment_methods": [],
         }
 
+        query_words = set(query.replace(",", " ").split())
+
         for cat in categories:
-            if cat.lower() in query:
+            cat_lower = cat.lower()
+            cat_words = set(cat_lower.split())
+
+            if cat_lower in query:
+                filters["categories"].append(cat)
+            elif any(word in query_words for word in cat_words):
+                filters["categories"].append(cat)
+            elif cat_lower.endswith("s") and cat_lower[:-1] in query_words:
                 filters["categories"].append(cat)
 
         for region in regions:
-            if region.lower() in query:
+            region_lower = region.lower()
+            if region_lower in query:
                 filters["regions"].append(region)
 
         for year in range(min_year, max_year + 1):
@@ -265,7 +275,8 @@ def server(input, output, session):
 
         payment_methods = sorted(df["payment_method"].dropna().unique().tolist())
         for pm in payment_methods:
-            if pm.lower() in query:
+            pm_lower = pm.lower()
+            if pm_lower in query:
                 filters["payment_methods"].append(pm)
 
         return filters
@@ -282,6 +293,19 @@ def server(input, output, session):
             return
 
         filters = parse_query_rule_based(query)
+
+        no_filters_found = (
+            not filters["years"]
+            and not filters["categories"]
+            and not filters["regions"]
+            and not filters["payment_methods"]
+        )
+
+        if no_filters_found:
+            ai_df_store.set(df.iloc[0:0].copy())
+            ai_status_store.set("No recognizable filters found in query.")
+            return
+
         d = df.copy()
 
         if filters["years"]:
