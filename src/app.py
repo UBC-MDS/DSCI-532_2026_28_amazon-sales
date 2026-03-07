@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import plotly.express as px
 from matplotlib.ticker import FuncFormatter
+from anthropic import Anthropic
 
 DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "raw" / "amazon_sales_dataset.csv"
 df = pd.read_csv(DATA_PATH, parse_dates=["order_date"])
@@ -40,138 +41,173 @@ REGION_MAPPING = {
         ]
     }
 
-app_ui = ui.page_fluid(
-    ui.panel_title("Amazon Sales Dashboard"),
-    ui.layout_sidebar(
-        ui.sidebar(
+app_ui = ui.page_navbar(
+    ui.nav_panel(
+        "Dashboard",
+        ui.page_fluid(
+            ui.panel_title("Amazon Sales Dashboard"),
+            ui.layout_sidebar(
+                ui.sidebar(
 
-            ui.input_slider(
-                id="input_year",
-                label="Years",
-                min=min_year, 
-                max=max_year, 
-                value=(min_year, max_year),
-                step=1,
-                sep="", 
-            ),
+                    ui.input_slider(
+                        id="input_year",
+                        label="Years",
+                        min=min_year, 
+                        max=max_year, 
+                        value=(min_year, max_year),
+                        step=1,
+                        sep="", 
+                    ),
 
-            ui.input_selectize(
-                id="input_month",
-                label="Months",
-                choices={
-                    1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 
-                    5: "May", 6: "Jun", 7: "Jul", 8: "Aug", 
-                    9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec"
-                },
-                multiple=True,
-                selected=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-            ),
+                    ui.input_selectize(
+                        id="input_month",
+                        label="Months",
+                        choices={
+                            1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 
+                            5: "May", 6: "Jun", 7: "Jul", 8: "Aug", 
+                            9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec"
+                        },
+                        multiple=True,
+                        selected=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+                    ),
 
-            ui.input_selectize(
-                id="input_category",
-                label="Categories (Max 3)",
-                choices=categories,
-                selected=default_category,
-                multiple=True,
-                options={"maxItems": 3},
-            ),
+                    ui.input_selectize(
+                        id="input_category",
+                        label="Categories (Max 3)",
+                        choices=categories,
+                        selected=default_category,
+                        multiple=True,
+                        options={"maxItems": 3},
+                    ),
 
-            ui.input_switch(
-                id="input_aggregate",
-                label="Compare to Aggregate",
-                value=False,
-            ),
+                    ui.input_switch(
+                        id="input_aggregate",
+                        label="Compare to Aggregate",
+                        value=False,
+                    ),
 
-            ui.input_checkbox_group(
-                id="input_region",
-                label="Regions",
-                choices=regions,
-                selected=regions,
-            ),
-            
-            ui.input_radio_buttons(
-                id="input_metric",
-                label="Primary Metric",
-                choices={
-                    "total_revenue": "Revenue",
-                    "quantity_sold": "Quantity Sold",
-                },
-                selected="total_revenue",
-            ),
+                    ui.input_checkbox_group(
+                        id="input_region",
+                        label="Regions",
+                        choices=regions,
+                        selected=regions,
+                    ),
+                    
+                    ui.input_radio_buttons(
+                        id="input_metric",
+                        label="Primary Metric",
+                        choices={
+                            "total_revenue": "Revenue",
+                            "quantity_sold": "Quantity Sold",
+                        },
+                        selected="total_revenue",
+                    ),
 
-            ui.input_switch(
-                id="input_season",
-                label="Show Seasonality Comparison",
-                value=False,
-            ),
-            width=300,
-        ),
+                    ui.input_switch(
+                        id="input_season",
+                        label="Show Seasonality Comparison",
+                        value=False,
+                    ),
+                    width=300,
+                ),
 
 
-        # 1. KPI Section
-        ui.layout_columns(
-            ui.value_box(
-                title="Total Revenue",
-                value=ui.output_text("valuebox_revenue"),
-                theme="primary",
-            ),
-            ui.value_box(
-                title="Total Orders",
-                value=ui.output_text("valuebox_orders"),
-                theme="bg-info",
-            ),
-            col_widths=(6, 6),
-            gap="20px",
-        ),
-        
-        # 2. Middle Row
-        ui.layout_columns(
-            ui.card(
-                ui.output_ui("trend_header"),
-                ui.output_plot("plot_trend"),
-            ),
-            ui.card(
-                ui.card_header("Selected Regions"),
-                output_widget("plot_map"),
-            ),
-            col_widths=(6, 6),
-        ),
+                # 1. KPI Section
+                ui.layout_columns(
+                    ui.value_box(
+                        title="Total Revenue",
+                        value=ui.output_text("valuebox_revenue"),
+                        theme="primary",
+                    ),
+                    ui.value_box(
+                        title="Total Orders",
+                        value=ui.output_text("valuebox_orders"),
+                        theme="bg-info",
+                    ),
+                    col_widths=(6, 6),
+                    gap="20px",
+                ),
+                
+                # 2. Middle Row
+                ui.layout_columns(
+                    ui.card(
+                        ui.output_ui("trend_header"),
+                        ui.output_plot("plot_trend"),
+                    ),
+                    ui.card(
+                        ui.card_header("Selected Regions"),
+                        output_widget("plot_map"),
+                    ),
+                    col_widths=(6, 6),
+                ),
 
-        # 3. Bottom Row
-        ui.layout_columns(
-            ui.panel_conditional(
-                "input.input_season", 
-                ui.card(
-                    ui.output_ui("season_header"),
-                    ui.output_plot("plot_season"),
+                # 3. Bottom Row
+                ui.layout_columns(
+                    ui.panel_conditional(
+                        "input.input_season", 
+                        ui.card(
+                            ui.output_ui("season_header"),
+                            ui.output_plot("plot_season"),
+                        ),
+                    ),
+                    ui.card(
+                        ui.output_ui("payment_header"),
+                        ui.output_plot("payment_method_bar"),
+                    ),
+                    col_widths=(6, 6),
                 ),
             ),
-            ui.card(
-                ui.output_ui("payment_header"),
-                ui.output_plot("payment_method_bar"),
-            ),
-            col_widths=(6, 6),
-        ),
-    ),
-    # Footer
-    ui.tags.footer(
-        ui.HTML(
-            """
-            <div style="text-align: center; margin-top: 30px; margin-bottom: 20px; padding-top: 15px; border-top: 1px solid #e5e5e5; color: #6c757d; font-size: 0.9em;">
-                <p style="margin-bottom: 5px;"><strong>Amazon Sales Dashboard:</strong> An interactive tool for exploring product trends, regional performance, and seasonal sales patterns.</p>
-                <p style="margin-bottom: 5px;"><strong>Authors:</strong> Hoi Hin Kwok, Yanxin Liang, Eduardo Sanchez</p>
-                <p style="margin-bottom: 0;">
-                    <a href="https://github.com/UBC-MDS/DSCI_524_group_25" target="_blank" style="color: #0d6efd; text-decoration: none;">GitHub Repository</a> 
-                    | Last Updated: Feb 2026
-                </p>
-            </div>
-            """
+            # Footer
+            ui.tags.footer(
+                ui.HTML(
+                    """
+                    <div style="text-align: center; margin-top: 30px; margin-bottom: 20px; padding-top: 15px; border-top: 1px solid #e5e5e5; color: #6c757d; font-size: 0.9em;">
+                        <p style="margin-bottom: 5px;"><strong>Amazon Sales Dashboard:</strong> An interactive tool for exploring product trends, regional performance, and seasonal sales patterns.</p>
+                        <p style="margin-bottom: 5px;"><strong>Authors:</strong> Hoi Hin Kwok, Yanxin Liang, Eduardo Sanchez</p>
+                        <p style="margin-bottom: 0;">
+                            <a href="https://github.com/UBC-MDS/DSCI_524_group_25" target="_blank" style="color: #0d6efd; text-decoration: none;">GitHub Repository</a> 
+                            | Last Updated: Feb 2026
+                        </p>
+                    </div>
+                    """
+                )
+            )
         )
-    )
-)
+    ),
+    ui.nav_panel(
+    "AI Assistant",
+        ui.page_fluid(
+            ui.h3("Ask the Data"),
+            ui.p("Use natural language to filter the dataset."),
 
+            ui.input_text_area(
+                "ai_query",
+                "Your query",
+                placeholder="Example: show electronics orders in North America in 2023",
+                rows=3,
+            ),
+
+            ui.input_action_button("run_ai_query", "Run query"),
+
+            ui.br(),
+            ui.br(),
+
+            ui.output_text("ai_status"),
+
+            ui.hr(),
+
+            ui.h4("Filtered dataframe"),
+            ui.output_data_frame("ai_filtered_table"),
+        )
+    ),
+title="Amazon Sales Dashboard",
+)
+   
 
 def server(input, output, session):
+
+    ai_df_store = reactive.value(df.copy())
+    ai_status_store = reactive.value("Waiting for a query.")
 
     def _months_selected():
         
