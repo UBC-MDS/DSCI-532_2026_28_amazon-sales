@@ -6,7 +6,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import plotly.express as px
 from matplotlib.ticker import FuncFormatter
-from anthropic import Anthropic
+import os
+import json
+import requests
 
 DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "raw" / "amazon_sales_dataset.csv"
 df = pd.read_csv(DATA_PATH, parse_dates=["order_date"])
@@ -179,7 +181,12 @@ app_ui = ui.page_navbar(
         ui.page_fluid(
             ui.h3("Ask the Data"),
             ui.p("Use natural language to filter the dataset."),
-
+            ui.p("You can filter by:"),
+            ui.p(
+                "You can filter by product category, region, payment method, and year. "
+                "Example: 'show electronics orders in North America in 2023'"
+            ),
+            
             ui.input_text_area(
                 "ai_query",
                 "Your query",
@@ -218,7 +225,69 @@ app_ui = ui.page_navbar(
     ),
 title="Amazon Sales Dashboard",
 )
-   
+
+def parse_query_github_models(query: str):
+    token = os.getenv("GITHUB_TOKEN")
+
+    if not token:
+        raise ValueError("GITHUB_TOKEN is not set.")
+
+    url = "https://models.inference.ai.azure.com/chat/completions"
+
+    system_prompt = """
+    You convert user queries into dataset filters.
+
+    Return valid JSON only with exactly this schema:
+    {
+    "categories": [],
+    "regions": [],
+    "years": [],
+    "payment_methods": []
+    }
+
+    Rules:
+    - categories must come only from the dataset categories
+    - regions must come only from the dataset regions
+    - years must be integers
+    - payment_methods must come only from the dataset payment methods
+    - if something is not mentioned, return an empty list
+    - do not include explanations
+    - do not include markdown
+    """
+
+    payment_methods = sorted(df["payment_method"].dropna().unique().tolist())
+
+    user_prompt = f"""
+    Dataset categories: {categories}
+    Dataset regions: {regions}
+    Dataset payment methods: {payment_methods}
+    Valid years: {list(range(min_year, max_year + 1))}
+
+    User query: {query}
+    """
+
+    payload = {
+        "model": "gpt-4o-mini",
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        "temperature": 0,
+        "max_tokens": 200
+    }
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {token}"
+    }
+
+    response = requests.post(url, headers=headers, json=payload)
+    response.raise_for_status()
+
+    result = response.json()
+    content = result["choices"][0]["message"]["content"].strip()
+
+    return json.loads(content)
 
 def server(input, output, session):
 
@@ -256,47 +325,6 @@ def server(input, output, session):
             d = d[d["customer_region"].isin(regs)]
 
         return d
-    
-    def parse_query_rule_based(query: str):
-        query = query.lower().strip()
-
-        filters = {
-            "categories": [],
-            "regions": [],
-            "years": [],
-            "payment_methods": [],
-        }
-
-        query_words = set(query.replace(",", " ").split())
-
-        for cat in categories:
-            cat_lower = cat.lower()
-            cat_words = set(cat_lower.split())
-
-            if cat_lower in query:
-                filters["categories"].append(cat)
-            elif any(word in query_words for word in cat_words):
-                filters["categories"].append(cat)
-            elif cat_lower.endswith("s") and cat_lower[:-1] in query_words:
-                filters["categories"].append(cat)
-
-        for region in regions:
-            region_lower = region.lower()
-            if region_lower in query:
-                filters["regions"].append(region)
-
-        for year in range(min_year, max_year + 1):
-            if str(year) in query:
-                filters["years"].append(year)
-
-        payment_methods = sorted(df["payment_method"].dropna().unique().tolist())
-        for pm in payment_methods:
-            pm_lower = pm.lower()
-            if pm_lower in query:
-                filters["payment_methods"].append(pm)
-
-        return filters
-
 
     @reactive.effect
     @reactive.event(input.run_ai_query)
@@ -308,7 +336,12 @@ def server(input, output, session):
             ai_status_store.set("No query entered. Showing full dataset.")
             return
 
-        filters = parse_query_rule_based(query)
+        try:
+            filters = parse_query_github_models(query)
+        except Exception as e:
+            ai_df_store.set(df.iloc[0:0].copy())
+            ai_status_store.set(f"LLM error: {str(e)}")
+            return
 
         no_filters_found = (
             not filters["years"]
@@ -417,7 +450,6 @@ def server(input, output, session):
         else:
             ax.set_ylabel("Total quantity sold (units)")
 
-        ax.set_xlabel("Month")
         ax.set_xlabel("Month")
         
         ax.tick_params(axis="x", rotation=45)
