@@ -68,7 +68,14 @@ Simply visit the **stable deployment link** above to explore the dashboard (No i
 
 ### Running the Dashboard Locally
 
-1. Run the app from the project root:
+1. Set a GitHub Personal Access Token (PAT) as an environment variable (required for the AI Explorer Tab).  
+   See: https://github.com/settings/personal-access-tokens
+
+    ```bash
+    export GITHUB_TOKEN="your_token_here"
+    ```
+
+2. Run the app from the project root:
 
     ```bash
     shiny run src/app.py
