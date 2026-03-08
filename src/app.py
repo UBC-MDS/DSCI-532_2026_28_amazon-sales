@@ -7,6 +7,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
+import os
+import json
+import requests
 
 # =============================================================================
 # 1. Data Loading and Preprocessing
@@ -98,15 +101,30 @@ app_ui = ui.page_navbar(
     ui.nav_panel(
         "AI Assistant",
         ui.page_fluid(
-            ui.h3("Ask the Data", class_="mt-3"),
+            ui.h3("Ask the Data"),
             ui.p("Use natural language to filter the dataset."),
-            ui.input_text_area("ai_query", "Your query", placeholder="Example: electronics orders in North America in 2023", rows=3),
-            ui.div(
-                ui.input_action_button("run_ai_query", "Run Query", class_="btn-primary"), 
-                ui.download_button("download_ai_data", "Download CSV"), 
-                style="display: flex; gap: 10px;"
+            ui.p(
+                "You can filter by product category, region, payment method, and year. "
+                "Example: 'show electronics orders in North America in 2023'"
             ),
-            ui.br(), ui.output_text("ai_status"), ui.hr(),
+            
+            ui.input_text_area(
+                "ai_query",
+                "Your query",
+                placeholder="Example: show electronics orders in North America in 2023",
+                rows=3,
+            ),
+
+            ui.input_action_button("run_ai_query", "Run Query"), 
+            ui.download_button("download_ai_data", "Download filtered data"), 
+
+            ui.br(),
+            ui.br(),
+            
+            ui.output_text("ai_status"), 
+            
+            ui.hr(),
+
             ui.h4("Filtered dataframe"),
             ui.output_data_frame("ai_filtered_table"),
             ui.hr(),
@@ -118,8 +136,70 @@ app_ui = ui.page_navbar(
         )
     ),
     title="Amazon Sales Dashboard",
-    fillable=True,
 )
+
+def parse_query_github_models(query: str):
+    token = os.getenv("GITHUB_TOKEN")
+
+    if not token:
+        raise ValueError("GITHUB_TOKEN is not set.")
+
+    url = "https://models.inference.ai.azure.com/chat/completions"
+
+    system_prompt = """
+    You convert user queries into dataset filters.
+
+    Return valid JSON only with exactly this schema:
+    {
+    "categories": [],
+    "regions": [],
+    "years": [],
+    "payment_methods": []
+    }
+
+    Rules:
+    - categories must come only from the dataset categories
+    - regions must come only from the dataset regions
+    - years must be integers
+    - payment_methods must come only from the dataset payment methods
+    - if something is not mentioned, return an empty list
+    - do not include explanations
+    - do not include markdown
+    """
+
+    payment_methods = sorted(df["payment_method"].dropna().unique().tolist())
+
+    user_prompt = f"""
+    Dataset categories: {categories}
+    Dataset regions: {regions}
+    Dataset payment methods: {payment_methods}
+    Valid years: {list(range(min_year, max_year + 1))}
+
+    User query: {query}
+    """
+
+    payload = {
+        "model": "gpt-4o-mini",
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        "temperature": 0,
+        "max_tokens": 200
+    }
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {token}"
+    }
+
+    response = requests.post(url, headers=headers, json=payload)
+    response.raise_for_status()
+
+    result = response.json()
+    content = result["choices"][0]["message"]["content"].strip()
+
+    return json.loads(content)
 
 # =============================================================================
 # 3. Server Logic
@@ -127,12 +207,12 @@ app_ui = ui.page_navbar(
 def server(input, output, session):
 
     # --- Global Reactive States ---
-    clicked_region_state = reactive.Value(None)
+    clicked_region_state = reactive.value(None)
     ai_df_store = reactive.value(df.copy())
     ai_status_store = reactive.value("Waiting for a query.")
 
     # --- Dashboard: Reset Logic ---
-    @reactive.Effect
+    @reactive.effect
     @reactive.event(input.reset_btn)
     def _():
         ui.update_checkbox_group("input_year", selected=year_choices)
@@ -153,6 +233,53 @@ def server(input, output, session):
             "format": "$,.0s" if is_rev else ",.0f",
             "short": "Revenue" if is_rev else "Quantity"
         }
+
+    @reactive.effect
+    @reactive.event(input.run_ai_query)
+    def _run_ai_query():
+        query = input.ai_query().strip()
+
+        if not query:
+            ai_df_store.set(df.copy())
+            ai_status_store.set("No query entered. Showing full dataset.")
+            return
+
+        try:
+            filters = parse_query_github_models(query)
+        except Exception as e:
+            ai_df_store.set(df.iloc[0:0].copy())
+            ai_status_store.set(f"LLM error: {str(e)}")
+            return
+
+        no_filters_found = (
+            not filters["years"]
+            and not filters["categories"]
+            and not filters["regions"]
+            and not filters["payment_methods"]
+        )
+
+        if no_filters_found:
+            ai_df_store.set(df.iloc[0:0].copy())
+            ai_status_store.set("No recognizable filters found in query.")
+            return
+
+        d = df.copy()
+
+        if filters["years"]:
+            d = d[d["order_date"].dt.year.isin(filters["years"])]
+
+        if filters["categories"]:
+            d = d[d["product_category"].isin(filters["categories"])]
+
+        if filters["regions"]:
+            d = d[d["customer_region"].isin(filters["regions"])]
+
+        if filters["payment_methods"]:
+            d = d[d["payment_method"].isin(filters["payment_methods"])]
+
+        ai_df_store.set(d)
+        ai_status_store.set(f"Matched {len(d):,} rows.")
+
 
     # --- Dashboard: Data Filtering ---
     @reactive.calc
@@ -239,7 +366,7 @@ def server(input, output, session):
             
         return fw
 
-    @reactive.Effect
+    @reactive.effect
     def _sync_map_click():
         reg = clicked_region_state()
         if reg:
@@ -286,37 +413,18 @@ def server(input, output, session):
     @render.ui
     def payment_header(): return ui.card_header(f"{m_info()['short']} by Payment Method")
 
-    # =========================================================================
-    # AI ASSISTANT LOGIC
-    # =========================================================================
-    @reactive.effect
-    @reactive.event(input.run_ai_query)
-    def _run_ai_logic():
-        query = input.ai_query().lower().strip()
-        if not query: return
-        
-        d = df.copy()
-        found_years = [y for y in range(min_year, max_year + 1) if str(y) in query]
-        found_cats = [c for c in categories if c.lower() in query]
-        found_regs = [r for r in regions if r.lower() in query]
-        
-        if found_years: d = d[d["order_date"].dt.year.isin(found_years)]
-        if found_cats: d = d[d["product_category"].isin(found_cats)]
-        if found_regs: d = d[d["customer_region"].isin(found_regs)]
-        
-        ai_df_store.set(d)
-        ai_status_store.set(f"Matched {len(d):,} rows.")
-
+    
+    #--- Chatbot DF output ---
     @output
     @render.text
-    def ai_status(): 
+    def ai_status():
         return ai_status_store()
 
     @output
     @render.data_frame
-    def ai_filtered_table(): 
+    def ai_filtered_table():
         return render.DataGrid(ai_df_store(), filters=True)
-
+    
     @render.download(filename="ai_filtered_data.csv")
     def download_ai_data(): 
         yield ai_df_store().to_csv(index=False)
