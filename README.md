@@ -89,7 +89,7 @@ For contribution guidelines and development workflow details, see [CONTRIBUTING.
 
 - Dataset: Amazon Sales Dataset
 - Source: Kaggle
-- Link: https://www.kaggle.com/datasets/aliihussain/amazon-sales-dataset
+- Link: https://www.kaggle.com/datasets/aliiihussain/amazon-sales-dataset
 - Stored locally in: `data/raw/amazon_sales_dataset.csv`
 - Size: ~4.2 MB
 
