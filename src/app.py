@@ -2,466 +2,363 @@ from shiny import App, ui, reactive, render
 from shinywidgets import output_widget, render_widget
 import pandas as pd
 from pathlib import Path
-import matplotlib.pyplot as plt
 import numpy as np
 import plotly.express as px
+import plotly.graph_objects as go
+import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
+import os
+import json
+import requests
 
+# =============================================================================
+# 1. Data Loading and Preprocessing
+# =============================================================================
 DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "raw" / "amazon_sales_dataset.csv"
+
+# Load and sanitize data
 df = pd.read_csv(DATA_PATH, parse_dates=["order_date"])
+df["total_revenue"] = pd.to_numeric(df["total_revenue"], errors="coerce").fillna(0)
 
-# for input_year
-min_year = df["order_date"].dt.year.min()
-max_year = df["order_date"].dt.year.max()
-
-# for input_category
+min_year, max_year = int(df["order_date"].dt.year.min()), int(df["order_date"].dt.year.max())
+year_choices = [str(y) for y in range(min_year, max_year + 1)]
 categories = sorted(df["product_category"].dropna().unique().tolist())
-default_category = categories[0]
-
-# for input_region
 regions = sorted(df["customer_region"].dropna().unique().tolist())
 
-# for plot_map
-REGION_MAPPING = {
-        "Asia": [
-            "China", "India", "Japan", "South Korea", "Vietnam", "Thailand", 
-            "Indonesia", "Malaysia", "Philippines", "Singapore", "Taiwan"
-        ],
-        "Europe": [
-            "Germany", "France", "United Kingdom", "Italy", "Spain", "Netherlands", 
-            "Belgium", "Switzerland", "Sweden", "Norway", "Poland", "Portugal"
-        ],
-        "Middle East": [
-            "Saudi Arabia", "United Arab Emirates", "Israel", "Turkey", "Qatar", 
-            "Kuwait", "Jordan", "Oman", "Lebanon"
-        ],
-        "North America": [
-            "United States", "Canada", "Mexico"
-        ]
-    }
+REGION_COUNTRY_MAPPING = {
+    "Asia": ["China", "India", "Japan", "South Korea", "Vietnam", "Thailand", "Indonesia", "Malaysia", "Philippines", "Singapore", "Taiwan"],
+    "Europe": ["Germany", "France", "United Kingdom", "Italy", "Spain", "Netherlands", "Belgium", "Switzerland", "Sweden", "Norway", "Poland", "Portugal"],
+    "Middle East": ["Saudi Arabia", "United Arab Emirates", "Israel", "Turkey", "Qatar", "Kuwait", "Jordan", "Oman", "Lebanon"],
+    "North America": ["United States", "Canada", "Mexico"]
+}
 
-app_ui = ui.page_fluid(
-    ui.panel_title("Amazon Sales Dashboard"),
-    ui.layout_sidebar(
-        ui.sidebar(
+LABEL_MAP = {
+    "month_start": "Month",
+    "product_category": "Category",
+    "season": "Season",
+    "payment_method": "Payment Method",
+    "total_revenue": "Revenue ($)",
+    "order_id": "Total Orders",
+    "customer_region": "Region"
+}
 
-            ui.input_slider(
-                id="input_year",
-                label="Years",
-                min=min_year, 
-                max=max_year, 
-                value=(min_year, max_year),
-                step=1,
-                sep="", 
-            ),
+# =============================================================================
+# 2. User Interface (UI) Definition
+# =============================================================================
+app_ui = ui.page_navbar(
+    # --- TAB 1: DASHBOARD ---
+    ui.nav_panel(
+        "Dashboard",
+        ui.page_fillable(
+            ui.layout_sidebar(
+                ui.sidebar(
+                    ui.input_checkbox_group("input_year", "Years", choices=year_choices, selected=year_choices, inline=True),
+                    ui.input_selectize(
+                        "input_month", "Months", 
+                        choices={i: m for i, m in enumerate(["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], 1)},
+                        multiple=True, selected=list(range(1, 13))
+                    ),
+                    ui.input_selectize("input_category", "Categories (Max 3)", choices=categories, selected=categories[0], multiple=True, options={"maxItems": 3}),
+                    ui.input_checkbox_group("input_region", "Regions", choices=regions, selected=regions, inline=False),
+                    ui.input_radio_buttons("input_metric", "Primary Metric:", choices={"total_revenue": "Revenue ($)", "order_id": "Total Orders"}, selected="total_revenue", inline=True),
+                    ui.input_switch("input_aggregate", "Show Aggregate", value=False),
+                    ui.input_switch("input_season", "Show Seasonality", value=True),
+                    ui.input_action_button("reset_btn", "Reset All Filters", class_="btn-warning mt-2"),
+                    width=260,
+                ),
 
-            ui.input_selectize(
-                id="input_month",
-                label="Months",
-                choices={
-                    1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 
-                    5: "May", 6: "Jun", 7: "Jul", 8: "Aug", 
-                    9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec"
-                },
-                multiple=True,
-                selected=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-            ),
-
-            ui.input_selectize(
-                id="input_category",
-                label="Categories (Max 3)",
-                choices=categories,
-                selected=default_category,
-                multiple=True,
-                options={"maxItems": 3},
-            ),
-
-            ui.input_switch(
-                id="input_aggregate",
-                label="Compare to Aggregate",
-                value=False,
-            ),
-
-            ui.input_checkbox_group(
-                id="input_region",
-                label="Regions",
-                choices=regions,
-                selected=regions,
-            ),
-            
-            ui.input_radio_buttons(
-                id="input_metric",
-                label="Primary Metric",
-                choices={
-                    "total_revenue": "Revenue",
-                    "quantity_sold": "Quantity Sold",
-                },
-                selected="total_revenue",
-            ),
-
-            ui.input_switch(
-                id="input_season",
-                label="Show Seasonality Comparison",
-                value=False,
-            ),
-            width=300,
-        ),
-
-
-        # 1. KPI Section
-        ui.layout_columns(
-            ui.value_box(
-                title="Total Revenue",
-                value=ui.output_text("valuebox_revenue"),
-                theme="primary",
-            ),
-            ui.value_box(
-                title="Total Orders",
-                value=ui.output_text("valuebox_orders"),
-                theme="bg-info",
-            ),
-            col_widths=(6, 6),
-            gap="20px",
-        ),
-        
-        # 2. Middle Row
-        ui.layout_columns(
-            ui.card(
-                ui.output_ui("trend_header"),
-                ui.output_plot("plot_trend"),
-            ),
-            ui.card(
-                ui.card_header("Selected Regions"),
-                output_widget("plot_map"),
-            ),
-            col_widths=(6, 6),
-        ),
-
-        # 3. Bottom Row
-        ui.layout_columns(
-            ui.panel_conditional(
-                "input.input_season", 
-                ui.card(
-                    ui.output_ui("season_header"),
-                    ui.output_plot("plot_season"),
+                # Main Display Area
+                ui.div(
+                    # ROW 1 (3/5 Height Ratio)
+                    ui.div(
+                        ui.layout_columns(
+                            ui.layout_columns(
+                                ui.card(ui.div(ui.strong("Total Revenue: "), ui.output_text("valuebox_revenue", inline=True)), class_="d-flex justify-content-center align-items-center bg-primary text-white fs-6 p-2 m-0 text-nowrap"),
+                                ui.card(ui.div(ui.strong("Total Orders: "), ui.output_text("valuebox_orders", inline=True)), class_="d-flex justify-content-center align-items-center bg-info text-white fs-6 p-2 m-0 text-nowrap"),
+                                ui.card(ui.output_ui("trend_header"), output_widget("plot_trend")),
+                                col_widths=(6, 6, 12), row_heights=["min-content", "1fr"], gap="10px", height="100%"
+                            ),
+                            ui.card(ui.card_header("Regional Distribution (Click to filter)"), output_widget("plot_map")),
+                            col_widths=(5, 7), gap="10px", height="100%"
+                        ),
+                        style="flex: 3 1 0; min-height: 0;"
+                    ),
+                    
+                    # ROW 2 (2/5 Height Ratio)
+                    ui.div(
+                        ui.layout_columns(
+                            ui.div(
+                                ui.panel_conditional("input.input_season", ui.card(ui.output_ui("season_header"), output_widget("plot_season"), style="height: 100%; margin: 0;")),
+                                style="height: 100%;"
+                            ),
+                            ui.card(ui.output_ui("payment_header"), output_widget("payment_method_bar")),
+                            col_widths=(6, 6), gap="10px", height="100%"
+                        ),
+                        style="flex: 2 1 0; min-height: 0;"
+                    ),
+                    # Unified Footer
+                    ui.tags.footer(
+                        ui.div(
+                            ui.div(ui.strong("Project: Amazon Sales Dashboard"), style="margin-bottom: 2px;"),
+                            ui.span("Authors: Hoi Hin Kwok, Yanxin Liang, Eduardo Sanchez"),
+                            ui.span(" | "),
+                            ui.tags.a("GitHub Repository", href="https://github.com/UBC-MDS/DSCI-532_2026_28_amazon-sales", target="_blank"),
+                            ui.span(" | "),
+                            ui.tags.a("Data Source: Kaggle", href="https://www.kaggle.com/datasets/aliiihussain/amazon-sales-dataset", target="_blank"),
+                            ui.div("Last Modified: March 2026", style="font-size: 0.9em; margin-top: 2px;"),
+                            style="text-align: center; color: #6c757d; font-size: 0.72em; padding: 5px; border-top: 1px solid #eee;"
+                        ),
+                        style="flex: 0 0 auto;"
+                    ),
+                    style="display: flex; flex-direction: column; height: calc(100vh - 80px); gap: 10px; overflow: hidden;"
                 ),
             ),
-            ui.card(
-                ui.output_ui("payment_header"),
-                ui.output_plot("payment_method_bar"),
-            ),
-            col_widths=(6, 6),
-        ),
-    ),
-    # Footer
-    ui.tags.footer(
-        ui.HTML(
-            """
-            <div style="text-align: center; margin-top: 30px; margin-bottom: 20px; padding-top: 15px; border-top: 1px solid #e5e5e5; color: #6c757d; font-size: 0.9em;">
-                <p style="margin-bottom: 5px;"><strong>Amazon Sales Dashboard:</strong> An interactive tool for exploring product trends, regional performance, and seasonal sales patterns.</p>
-                <p style="margin-bottom: 5px;"><strong>Authors:</strong> Hoi Hin Kwok, Yanxin Liang, Eduardo Sanchez</p>
-                <p style="margin-bottom: 0;">
-                    <a href="https://github.com/UBC-MDS/DSCI_524_group_25" target="_blank" style="color: #0d6efd; text-decoration: none;">GitHub Repository</a> 
-                    | Last Updated: Feb 2026
-                </p>
-            </div>
-            """
         )
-    )
+    ),
+
+    # --- TAB 2: AI ASSISTANT ---
+    ui.nav_panel(
+        "AI Assistant",
+        ui.page_fluid(
+            ui.h3("Ask the Data", class_="mt-3"),
+            ui.p("Use natural language to filter the dataset."),
+            ui.input_text_area("ai_query", "Your query", placeholder="Example: electronics orders in North America in 2023", rows=3),
+            ui.div(
+                ui.input_action_button("run_ai_query", "Run Query", class_="btn-primary"), 
+                ui.download_button("download_ai_data", "Download CSV"), 
+                style="display: flex; gap: 10px;"
+            ),
+            ui.br(), ui.output_text("ai_status"), ui.hr(),
+            ui.h4("Filtered Dataframe"),
+            ui.output_data_frame("ai_filtered_table"),
+            ui.hr(),
+            ui.layout_columns(
+                ui.card(ui.card_header("Revenue Trend by Category"), ui.output_plot("ai_plot_trend")),
+                ui.card(ui.card_header("Average Revenue by Season"), ui.output_plot("ai_plot_season")),
+                col_widths=(6, 6)
+            ),
+        )
+    ),
+    title="Amazon Sales Dashboard",
+    fillable=True,
 )
 
-
+# =============================================================================
+# 3. Server Logic
+# =============================================================================
 def server(input, output, session):
 
-    def _months_selected():
-        
-        vals = input.input_month()
-        if vals is None:
-            return list(range(1, 13))
-        return [int(v) for v in vals]
+    # --- Reactive Value Stores ---
+    clicked_region_state = reactive.Value(None)
+    ai_df_store = reactive.Value(df.copy())
+    ai_status_store = reactive.Value("Waiting for a query.")
 
-    def _metric_col():
-        m = input.input_metric()
-        return "total_revenue" if m == "total_revenue" else "quantity_sold"
+    # --- DASHBOARD LOGIC ---
 
+    @reactive.effect
+    @reactive.event(input.reset_btn)
+    def _reset_filters():
+        ui.update_checkbox_group("input_year", selected=year_choices)
+        ui.update_selectize("input_month", selected=list(range(1, 13)))
+        ui.update_selectize("input_category", selected=[categories[0]])
+        ui.update_checkbox_group("input_region", selected=regions)
+        ui.update_radio_buttons("input_metric", selected="total_revenue")
+        ui.update_switch("input_aggregate", value=False)
+        ui.update_switch("input_season", value=True)
 
     @reactive.calc
-    def filtered_df():
-        d = df.copy()
-
-        y0, y1 = input.input_year()
-        d = d[(d["order_date"].dt.year >= int(y0)) & (d["order_date"].dt.year <= int(y1))]
-
-        months = _months_selected()
-        d = d[d["order_date"].dt.month.isin(months)]
-
-        cats = input.input_category()
-        if cats:
-            d = d[d["product_category"].isin(cats)]
-
-        regs = input.input_region()
-        if regs:
-            d = d[d["customer_region"].isin(regs)]
-
-        return d
-
-    # --- shared KPI calc consumed by multiple outputs ---
-    @reactive.calc
-    def kpi():
-        d = filtered_df()
-
-        total_revenue = float(d["total_revenue"].sum())
-        total_orders = int(d["order_id"].nunique())
-        avg_order_value = total_revenue / total_orders if total_orders > 0 else 0.0
-
+    def m_info():
+        is_rev = input.input_metric() == "total_revenue"
         return {
-            "total_revenue": total_revenue,
-            "total_orders": total_orders,
-            "avg_order_value": avg_order_value,
+            "id": input.input_metric(),
+            "label": "Revenue ($)" if is_rev else "Total Orders",
+            "exact_format": "$,.0f" if is_rev else ",.0f",
+            "short": "Revenue" if is_rev else "Orders",
+            "agg_func": "sum" if is_rev else "nunique"
         }
 
-    # --- KPI outputs (2 outputs consuming same reactive calc) ---
-    @output
-    @render.text
-    def valuebox_revenue():
-        return f"${kpi()['total_revenue']:,.0f}"
+    @reactive.calc
+    def dashboard_filtered_df():
+        d = df.copy()
+        years = [int(y) for y in (input.input_year() or [])]
+        months = [int(m) for m in (input.input_month() or [])]
+        cats = input.input_category() or []
+        regs = input.input_region() or []
+        if not (years and months and cats and regs): return d.iloc[0:0]
+        return d[d["order_date"].dt.year.isin(years) & d["order_date"].dt.month.isin(months) & d["product_category"].isin(cats) & d["customer_region"].isin(regs)]
 
-    @output
+    @output 
     @render.text
-    def valuebox_orders():
-        return f"{kpi()['total_orders']:,}"
+    def valuebox_revenue(): return f"${dashboard_filtered_df()['total_revenue'].sum():,.0f}"
 
-    # --- Trend chart (depends on filtered_df + metric + aggregate switch) ---
-    @output
-    @render.plot
+    @output 
+    @render.text
+    def valuebox_orders(): return f"{dashboard_filtered_df()['order_id'].nunique():,}"
+
+    @output 
+    @render_widget
     def plot_trend():
-        d = filtered_df()
-        metric = _metric_col()
-
-        if d.empty:
-            fig, ax = plt.subplots()
-            ax.set_title("Trend Chart")
-            ax.text(0.5, 0.5, "No data for selected filters", ha="center", va="center")
-            ax.axis("off")
-            return fig
-
-        d2 = d.copy()
-        d2["month_start"] = d2["order_date"].dt.to_period("M").dt.to_timestamp()
-
-        by_cat = (
-            d2.groupby(["month_start", "product_category"], as_index=False)[metric]
-              .sum()
-              .sort_values("month_start")
-        )
-
-        fig, ax = plt.subplots(constrained_layout=True)
-        for cat, g in by_cat.groupby("product_category"):
-            ax.plot(g["month_start"], g[metric], marker="o", linewidth=1, label=str(cat))
-
+        d = dashboard_filtered_df()
+        if d.empty: return px.line(title="No data").update_layout(template="plotly_white")
+        info = m_info()
+        d["month_start"] = d["order_date"].dt.to_period("M").dt.to_timestamp()
+        grouped = d.groupby(["month_start", "product_category"], as_index=False).agg({info["id"]: info["agg_func"]})
+        fig = px.line(grouped, x="month_start", y=info["id"], color="product_category", markers=True, template="plotly_white", labels=LABEL_MAP)
         if input.input_aggregate():
-            overall = d2.groupby("month_start", as_index=False)[metric].sum().sort_values("month_start")
-            ax.plot(overall["month_start"], overall[metric], linewidth=2, label="Aggregate")
-        
-        if metric == "total_revenue":
-            ax.set_ylabel("Total revenue (USD)")
-            ax.yaxis.set_major_formatter(FuncFormatter(lambda x, pos: f"${x:,.0f}"))
-
-        else:
-            ax.set_ylabel("Total quantity sold (units)")
-
-        ax.set_xlabel("Month")
-        ax.set_xlabel("Month")
-        
-        ax.tick_params(axis="x", rotation=45)
-        ax.legend(loc="best", fontsize=8)
-        fig.tight_layout()
+            agg = d.groupby("month_start", as_index=False).agg({info["id"]: info["agg_func"]})
+            fig.add_scatter(x=agg["month_start"], y=agg[info["id"]], mode="lines+markers", name="Aggregate", line=dict(color="black", dash="dash"))
+        fig.update_layout(margin=dict(l=10, r=10, t=10, b=10), yaxis_title=info["label"], yaxis_tickformat=info["exact_format"])
         return fig
 
-    # --- "Map" placeholder (reactive summary by region) ---
-    @output
+    @output 
     @render_widget 
     def plot_map():
-        d = filtered_df()
-        metric = _metric_col()
-        
-        # Create a clean label for the tooltip
-        metric_label = "Total Revenue" if metric == "total_revenue" else "Total Orders"
-        
-        if d.empty:
-            fig = px.choropleth(scope="world")
-            fig.update_layout(title="No data for selected filters", margin={"r":0,"t":40,"l":0,"b":0})
-            return fig
+        # Map ignores region sidebar for background view
+        d_base = df.copy()
+        years, months, cats = [int(y) for y in (input.input_year() or [])], [int(m) for m in (input.input_month() or [])], input.input_category() or []
+        d_base = d_base[d_base["order_date"].dt.year.isin(years) & d_base["order_date"].dt.month.isin(months) & d_base["product_category"].isin(cats)]
+        info = m_info()
+        if d_base.empty: return px.choropleth(scope="world").update_layout(template="plotly_white")
+        summary = d_base.groupby("customer_region", as_index=False).agg({info["id"]: info["agg_func"]})
+        map_list = []
+        selected_regs = list(input.input_region() or [])
+        for _, row in summary.iterrows():
+            reg = row["customer_region"]
+            val = row[info["id"]]
+            fmt_val = f"${val:,.0f}" if info["id"] == "total_revenue" else f"{val:,.0f}"
+            if reg in REGION_COUNTRY_MAPPING:
+                for country in REGION_COUNTRY_MAPPING[reg]:
+                    map_list.append({"Country": country, "Region": reg, "FormattedValue": fmt_val, info["id"]: val})
+        if not map_list: return px.choropleth(scope="world").update_layout(template="plotly_white")
+        fig = px.choropleth(pd.DataFrame(map_list), locations="Country", locationmode="country names", color="Region", custom_data=["Region", "FormattedValue"], template="plotly_white", labels=LABEL_MAP)
+        fig.update_traces(hovertemplate="<b>%{customdata[0]}</b><br>" + info["label"] + ": %{customdata[1]}<extra></extra>")
+        fig.update_geos(showcountries=True, countrycolor="White", showocean=True, oceancolor="#E8F4F8", projection_type="equirectangular")
+        fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, clickmode="event", showlegend=False, dragmode=False)
+        for trace in fig.data: trace.marker.opacity = 1.0 if trace.name in selected_regs else 0.2
+        fw = go.FigureWidget(fig)
+        def handle_click(trace, points, state):
+            if points.point_inds: clicked_region_state.set(trace.customdata[points.point_inds[0]][0])
+        for trace in fw.data: trace.on_click(handle_click)
+        return fw
 
-        # 1. Aggregate your data by the custom regions
-        region_summary = d.groupby("customer_region", as_index=False)[metric].sum()
+    @reactive.effect
+    def _sync_map_click():
+        reg = clicked_region_state()
+        if reg:
+            current = list(input.input_region() or [])
+            if reg in current: current.remove(reg)
+            else: current.append(reg)
+            ui.update_checkbox_group("input_region", selected=current)
+            clicked_region_state.set(None)
 
-        map_data = [] 
-
-        # 2. Map data and format the numbers for the tooltip
-        for _, row in region_summary.iterrows():
-            region_name = row["customer_region"]
-            value = row[metric]
-            
-            # Format as currency or standard number
-            if metric == "total_revenue":
-                formatted_val = f"${value:,.2f}"
-            else:
-                formatted_val = f"{value:,.0f}"
-
-            if region_name in REGION_MAPPING:
-                for country in REGION_MAPPING[region_name]:
-                    map_data.append({
-                        "Country": country, 
-                        "Region": region_name, 
-                        metric_label: formatted_val
-                    })
-        
-        if not map_data:
-            fig = px.choropleth(scope="world")
-            fig.update_layout(title="No mapped countries for selected regions", margin={"r":0,"t":40,"l":0,"b":0})
-            return fig
-
-        plot_df = pd.DataFrame(map_data)
-
-        # 3. Create the Categorical Map
-        fig = px.choropleth(
-            plot_df,
-            locations="Country",
-            locationmode="country names",
-            color="Region",  # <--- CHANGED: Colors by Region category instead of Value
-            hover_name="Region", # <--- Sets the bold title of the tooltip to the Region
-            hover_data={
-                "Country": False,  # <--- Hides the specific country name
-                "Region": False,   # Hides the redundant region row
-                metric_label: True # Shows our formatted metric
-            },
-            color_discrete_sequence=px.colors.qualitative.Pastel, # Distinct, visually pleasing colors
-            scope="world"
-        )
-
-        # 4. Background and Constant Zoom
-        fig.update_geos(
-            showcountries=True, 
-            countrycolor="White", # Makes borders cleaner between colored blocks
-            showocean=True, 
-            oceancolor="#f0f8ff", # Very light blue for ocean
-            projection_type="equirectangular"
-        )
-
-        fig.update_layout(
-            margin={"r":0,"t":0,"l":0,"b":0},
-            dragmode=False, 
-            legend_title_text="Regions" # Updates the legend title
-        )
-        
-        return fig
-    
-    # --- Season plot (reactive; shown only when input_season is ON in UI) ---
-    @output
-    @render.plot
+    @output 
+    @render_widget
     def plot_season():
-        d = filtered_df()
-        metric = _metric_col()
-
-        fig, ax = plt.subplots(constrained_layout=True)
-        if d.empty:
-            ax.set_title("Average Sales by Season")
-            ax.text(0.5, 0.5, "No data for selected filters", ha="center", va="center")
-            ax.axis("off")
-            return fig
-
-        d2 = d.copy()
-        m = d2["order_date"].dt.month
-        d2["season"] = np.select(
-            [m.isin([12, 1, 2]), m.isin([3, 4, 5]), m.isin([6, 7, 8]), m.isin([9, 10, 11])],
-            ["Winter", "Spring", "Summer", "Fall"],
-            default="Unknown"
-        )
-
-        # average per season by category
-        season_summary = (
-            d2.groupby(["season", "product_category"], as_index=False)[metric]
-              .mean()
-        )
-
-        season_order = ["Winter", "Spring", "Summer", "Fall"]
-        season_summary["season"] = pd.Categorical(season_summary["season"], season_order, ordered=True)
-        season_summary = season_summary.sort_values(["season", "product_category"])
-
-        # simple grouped bar (one bar per category per season)
-        seasons = season_order
-        cats = season_summary["product_category"].unique().tolist()
-        x = np.arange(len(seasons))
-        width = 0.8 / max(len(cats), 1)
-
-        for i, cat in enumerate(cats):
-            vals = []
-            for s in seasons:
-                row = season_summary[(season_summary["season"] == s) & (season_summary["product_category"] == cat)]
-                vals.append(float(row[metric].iloc[0]) if not row.empty else 0.0)
-            ax.bar(x + i * width, vals, width=width, label=str(cat))
-
-        if metric == "total_revenue":
-            ax.set_xlabel("Season")
-            ax.set_ylabel("Average revenue (USD)")
-            ax.yaxis.set_major_formatter(FuncFormatter(lambda x, pos: f"${x:,.0f}"))
-        else:
-            ax.set_xlabel("Season")
-            ax.set_ylabel("Average quantity sold (units)")
-
-        ax.set_xticks(x + width * (len(cats) - 1) / 2 if len(cats) else x)
-        ax.set_xticklabels(seasons)
-        ax.legend(fontsize=8)
-        fig.tight_layout()
+        d = dashboard_filtered_df()
+        if d.empty: return px.line(title="No data").update_layout(template="plotly_white")
+        info, mapping = m_info(), {12: "Winter", 1: "Winter", 2: "Winter", 3: "Spring", 4: "Spring", 5: "Spring", 6: "Summer", 7: "Summer", 8: "Summer", 9: "Fall", 10: "Fall", 11: "Fall"}
+        d["season"] = d["order_date"].dt.month.map(mapping)
+        grouped = d.groupby(["season", "product_category"], as_index=False).agg({info["id"]: info["agg_func"]})
+        grouped["season"] = pd.Categorical(grouped["season"], ["Spring", "Summer", "Fall", "Winter"], ordered=True)
+        fig = px.line(grouped.sort_values("season"), x="season", y=info["id"], color="product_category", markers=True, template="plotly_white", labels=LABEL_MAP)
+        fig.update_yaxes(rangemode="normal") 
+        fig.update_layout(margin=dict(l=10, r=10, t=10, b=10), yaxis_title=info["label"], yaxis_tickformat=info["exact_format"])
         return fig
 
-    # --- Payment method bar (reactive) ---
-    @output
-    @render.plot
+    @output 
+    @render_widget
     def payment_method_bar():
-        d = filtered_df()
-
-        fig, ax = plt.subplots(constrained_layout=True)
-        if d.empty:
-            ax.set_title("Revenue by Payment Method")
-            ax.text(0.5, 0.5, "No data for selected filters", ha="center", va="center")
-            ax.axis("off")
-            return fig
-
-        pm = (
-            d.groupby("payment_method", as_index=False)["total_revenue"]
-             .sum()
-             .sort_values("total_revenue", ascending=False)
-        )
-
-        ax.bar(pm["payment_method"], pm["total_revenue"])
-        ax.set_xlabel("Payment Method")
-        ax.set_ylabel("Total revenue (USD)")
-        ax.yaxis.set_major_formatter(FuncFormatter(lambda x, pos: f"${x:,.0f}"))
-        ax.tick_params(axis="x", rotation=20)
-        fig.tight_layout()
+        d = dashboard_filtered_df()
+        if d.empty: return px.bar(title="No data").update_layout(template="plotly_white")
+        info = m_info()
+        grouped = d.groupby("payment_method", as_index=False).agg({info["id"]: info["agg_func"]}).sort_values(info["id"], ascending=False)
+        fig = px.bar(grouped, x="payment_method", y=info["id"], color="payment_method", template="plotly_white", labels=LABEL_MAP)
+        fig.update_yaxes(rangemode="normal")
+        fig.update_layout(margin=dict(l=10, r=10, t=10, b=10), showlegend=False, yaxis_title=info["label"], yaxis_tickformat=info["exact_format"])
         return fig
-    
-    #add dynamic header for plot to show selected metric
-    @output
-    @render.ui
-    def trend_header():
-        if input.input_metric() == "total_revenue":
-            return ui.card_header("Monthly Revenue Trend by Product Category")
-        else:
-            return ui.card_header("Monthly Quantity Sold Trend by Product Category")
 
-    @output
-    @render.ui
-    def season_header():
-        if input.input_metric() == "total_revenue":
-            return ui.card_header("Average Revenue by Season")
-        else:
-            return ui.card_header("Average Quantity Sold by Season")
+    # --- AI ASSISTANT LOGIC (Full Integration) ---
 
-    @output
+    def parse_query_rule_based(query: str):
+        query = query.lower().strip()
+        f = {"categories": [], "regions": [], "years": [], "payment_methods": []}
+        words = set(query.replace(",", " ").split())
+        for cat in categories:
+            if cat.lower() in query or any(w in words for w in cat.lower().split()): f["categories"].append(cat)
+        for reg in regions:
+            if reg.lower() in query: f["regions"].append(reg)
+        for yr in range(min_year, max_year + 1):
+            if str(yr) in query: f["years"].append(yr)
+        p_methods = sorted(df["payment_method"].dropna().unique().tolist())
+        for pm in p_methods:
+            if pm.lower() in query: f["payment_methods"].append(pm)
+        return f
+
+    @reactive.effect
+    @reactive.event(input.run_ai_query)
+    def _run_ai_logic():
+        query = input.ai_query().strip()
+        if not query:
+            ai_df_store.set(df.copy())
+            ai_status_store.set("Showing full dataset.")
+            return
+        
+        # You can toggle between parse_query_github_models(query) or rule_based here
+        filters = parse_query_rule_based(query)
+        d_ai = df.copy()
+        if filters["years"]: d_ai = d_ai[d_ai["order_date"].dt.year.isin(filters["years"])]
+        if filters["categories"]: d_ai = d_ai[d_ai["product_category"].isin(filters["categories"])]
+        if filters["regions"]: d_ai = d_ai[d_ai["customer_region"].isin(filters["regions"])]
+        if filters["payment_methods"]: d_ai = d_ai[d_ai["payment_method"].isin(filters["payment_methods"])]
+        
+        ai_df_store.set(d_ai)
+        ai_status_store.set(f"Found {len(d_ai):,} matches.")
+
+    @output 
+    @render.text
+    def ai_status(): return ai_status_store()
+
+    @output 
+    @render.data_frame
+    def ai_filtered_table(): return render.DataGrid(ai_df_store(), filters=True)
+
+    @render.download(filename="ai_export.csv")
+    def download_ai_data(): yield ai_df_store().to_csv(index=False)
+
+    @output 
+    @render.plot
+    def ai_plot_trend():
+        d = ai_df_store()
+        fig, ax = plt.subplots(figsize=(6, 4))
+        if d.empty: return fig
+        d["m"] = d["order_date"].dt.to_period("M").dt.to_timestamp()
+        d.groupby(["m", "product_category"])["total_revenue"].sum().unstack().fillna(0).plot(ax=ax, marker='o')
+        ax.set_ylabel("Revenue ($)")
+        ax.yaxis.set_major_formatter(FuncFormatter(lambda x, p: f"${x:,.0f}"))
+        return fig
+
+    @output 
+    @render.plot
+    def ai_plot_season():
+        d = ai_df_store()
+        fig, ax = plt.subplots(figsize=(6, 4))
+        if d.empty: return fig
+        m = d["order_date"].dt.month
+        d["season"] = np.select([m.isin([12,1,2]), m.isin([3,4,5]), m.isin([6,7,8])], ["Winter", "Spring", "Summer"], default="Fall")
+        d.groupby(["season", "product_category"])["total_revenue"].mean().unstack().fillna(0).plot(kind='bar', ax=ax)
+        ax.set_ylabel("Avg Revenue ($)")
+        ax.yaxis.set_major_formatter(FuncFormatter(lambda x, p: f"${x:,.0f}"))
+        return fig
+
+    # Titles
+    @output 
     @render.ui
-    def payment_header():
-        return ui.card_header("Total Revenue by Payment Method")
+    def trend_header(): return ui.card_header(f"{m_info()['short']} Trends")
+    @output 
+    @render.ui
+    def season_header(): return ui.card_header(f"Total {m_info()['short']} by Season")
+    @output 
+    @render.ui
+    def payment_header(): return ui.card_header(f"{m_info()['short']} by Payment Method")
 
 app = App(app_ui, server)
