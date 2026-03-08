@@ -10,6 +10,16 @@
 
 ## Section 2: Description of the Data
 
+### Data Source
+
+- Dataset: Amazon Sales Dataset
+- Source: Kaggle
+- Link: https://www.kaggle.com/datasets/aliihussain/amazon-sales-dataset
+- Stored locally in: `data/raw/amazon_sales_dataset.csv`
+- Size: ~4.2 MB
+
+The dataset is included in the repository for reproducibility. No external download is required.
+
 ### Dataset Overview
 
 The dataset contains 50,000 rows and 13 columns. Each row represents an individual Amazon order record.

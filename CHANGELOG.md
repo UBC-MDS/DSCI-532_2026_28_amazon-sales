@@ -1,3 +1,34 @@
+## [0.3.0] - 2026-03-08
+
+### Added
+- Added an AI-powered tab with a QueryChat interface.
+- Added a dataframe output component to display the query-filtered results.
+- Added two visualizations based on the AI query-filtered dataframe.
+- Added a download button to export the filtered dataframe.
+- Added a reset button to clear all selections.
+
+### Changed
+- Set the seasonal plot to display by default.
+- Replaced the year input with checkboxes.
+- Updated charts to use an interactive plotting library with hover functionality.
+- Renamed the metric input to be more intuitive.
+- Updated the map style for better visualization.
+- Moved and compacted value boxes.
+- Allocated more space for the map visualization.
+- Added the data link and citation in Section 2 of the proposal.
+- Added group number and group name in the About section.
+
+### Fixed
+- Fixed the category selector issue where all categories appeared when none were selected.
+- Fixed the aggregated trend line color so it remains consistent when categories change.
+
+### Reflection
+
+In this milestone, we extended the dashboard by integrating an AI-powered tab that allows users to interact with the dataset using natural language queries. This feature provides a more flexible way to explore the data compared to traditional dashboard filters. Users can generate filtered datasets through the AI interface and immediately visualize the results with interactive charts.
+
+In addition to the AI functionality, we improved the usability of the dashboard by refining the layout, adding clearer input controls (such as checkbox selection for years), and improving the map and chart interactions. Using an interactive plotting library also enhanced the user experience by enabling hover tooltips and more responsive visualizations.
+
+Through this milestone, we gained experience integrating LLM-based features into an interactive data application and learned how to balance AI-driven exploration with structured dashboard components. This process also highlighted the importance of clear UI design and careful handling of AI-generated outputs to maintain a consistent and reliable user experience.
 ## [0.2.0] - 2026-02-28
 
 ### Added
