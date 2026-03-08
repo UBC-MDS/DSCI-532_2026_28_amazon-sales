@@ -98,7 +98,16 @@ app_ui = ui.page_navbar(
                     ),
                     # Unified Footer
                     ui.tags.footer(
-                        ui.HTML('<div style="text-align: center; color: #6c757d; font-size: 0.8em; padding: 5px; border-top: 1px solid #eee;"><strong>Amazon Sales Dashboard</strong> | Mar 2026</div>'),
+                        ui.div(
+                            ui.div(ui.strong("Project: Amazon Sales Dashboard"), style="margin-bottom: 2px;"),
+                            ui.span("Authors: Hoi Hin Kwok, Yanxin Liang, Eduardo Sanchez"),
+                            ui.span(" | "),
+                            ui.tags.a("GitHub Repository", href="https://github.com/UBC-MDS/DSCI-532_2026_28_amazon-sales", target="_blank"),
+                            ui.span(" | "),
+                            ui.tags.a("Data Source: Kaggle", href="https://www.kaggle.com/datasets/kanyasree/amazon-sales-dataset", target="_blank"),
+                            ui.div("Last Modified: March 2026", style="font-size: 0.9em; margin-top: 2px;"),
+                            style="text-align: center; color: #6c757d; font-size: 0.72em; padding: 5px; border-top: 1px solid #eee;"
+                        ),
                         style="flex: 0 0 auto;"
                     ),
                     style="display: flex; flex-direction: column; height: calc(100vh - 80px); gap: 10px; overflow: hidden;"
