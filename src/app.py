@@ -188,6 +188,7 @@ app_ui = ui.page_navbar(
             ),
 
             ui.input_action_button("run_ai_query", "Run query"),
+            ui.download_button("download_ai_data", "Download filtered data"),
 
             ui.br(),
             ui.br(),
@@ -198,6 +199,21 @@ app_ui = ui.page_navbar(
 
             ui.h4("Filtered dataframe"),
             ui.output_data_frame("ai_filtered_table"),
+
+            ui.hr(),
+
+            ui.layout_columns(
+                ui.card(
+                    ui.card_header("Revenue Trend by Category"),
+                    ui.output_plot("ai_plot_trend"),
+                ),
+                ui.card(
+                    ui.card_header("Average Revenue by Season and Category"),
+                    ui.output_plot("ai_plot_season"),
+                ),
+                col_widths=(6, 6),
+            ),
+
         )
     ),
 title="Amazon Sales Dashboard",
@@ -595,5 +611,118 @@ def server(input, output, session):
     @render.ui
     def payment_header():
         return ui.card_header("Total Revenue by Payment Method")
+
+    #add two plots for AI tab (seasonality and trend) 
+    @output
+    @render.plot
+    def ai_plot_season():
+        d = ai_df_store()
+        metric = "total_revenue"
+
+        fig, ax = plt.subplots(constrained_layout=True)
+
+        if d.empty:
+            ax.set_title("Average Revenue by Season")
+            ax.text(0.5, 0.5, "No data for selected filters", ha="center", va="center")
+            ax.axis("off")
+            return fig
+
+        d2 = d.copy()
+        m = d2["order_date"].dt.month
+        d2["season"] = np.select(
+            [
+                m.isin([12, 1, 2]),
+                m.isin([3, 4, 5]),
+                m.isin([6, 7, 8]),
+                m.isin([9, 10, 11]),
+            ],
+            ["Winter", "Spring", "Summer", "Fall"],
+            default="Unknown",
+        )
+
+        season_summary = (
+            d2.groupby(["season", "product_category"], as_index=False)[metric]
+              .mean()
+        )
+
+        season_order = ["Winter", "Spring", "Summer", "Fall"]
+        season_summary["season"] = pd.Categorical(
+            season_summary["season"],
+            categories=season_order,
+            ordered=True,
+        )
+        season_summary = season_summary.sort_values(["season", "product_category"])
+
+        seasons = season_order
+        cats = season_summary["product_category"].unique().tolist()
+        x = np.arange(len(seasons))
+        width = 0.8 / max(len(cats), 1)
+
+        for i, cat in enumerate(cats):
+            vals = []
+            for s in seasons:
+                row = season_summary[
+                    (season_summary["season"] == s)
+                    & (season_summary["product_category"] == cat)
+                ]
+                vals.append(float(row[metric].iloc[0]) if not row.empty else 0.0)
+
+            ax.bar(x + i * width, vals, width=width, label=str(cat))
+
+        ax.set_xlabel("Season")
+        ax.set_ylabel("Average revenue (USD)")
+        ax.yaxis.set_major_formatter(FuncFormatter(lambda x, pos: f"${x:,.0f}"))
+        ax.set_xticks(x + width * (len(cats) - 1) / 2 if len(cats) else x)
+        ax.set_xticklabels(seasons)
+        ax.legend(fontsize=8)
+
+        return fig
+
+
+    @output
+    @render.plot
+    def ai_plot_trend():
+        d = ai_df_store()
+        metric = "total_revenue"
+
+        fig, ax = plt.subplots(constrained_layout=True)
+
+        if d.empty:
+            ax.set_title("Revenue Trend by Category")
+            ax.text(0.5, 0.5, "No data for selected filters", ha="center", va="center")
+            ax.axis("off")
+            return fig
+
+        d2 = d.copy()
+        d2["month_start"] = d2["order_date"].dt.to_period("M").dt.to_timestamp()
+
+        by_cat = (
+            d2.groupby(["month_start", "product_category"], as_index=False)[metric]
+              .sum()
+              .sort_values("month_start")
+        )
+
+        for cat, g in by_cat.groupby("product_category"):
+            ax.plot(
+                g["month_start"],
+                g[metric],
+                marker="o",
+                linewidth=2,
+                label=str(cat),
+            )
+
+        
+        ax.set_xlabel("Month")
+        ax.set_ylabel("Total revenue (USD)")
+        ax.yaxis.set_major_formatter(FuncFormatter(lambda x, pos: f"${x:,.0f}"))
+        ax.tick_params(axis="x", rotation=30)
+        ax.legend(fontsize=8)
+
+        return fig
+
+
+    @render.download(filename="ai_filtered_data.csv")
+    def download_ai_data():
+        yield ai_df_store().to_csv(index=False)
 
 app = App(app_ui, server)
