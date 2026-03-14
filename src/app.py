@@ -1,4 +1,4 @@
-from shiny import App, ui, reactive, render
+from shiny import App, ui, reactive, render, req
 from shinywidgets import output_widget, render_widget
 import pandas as pd
 from pathlib import Path
@@ -59,9 +59,9 @@ app_ui = ui.page_navbar(
                         multiple=True, selected=list(range(1, 13))
                     ),
                     ui.input_selectize("input_category", "Categories (Max 3)", choices=categories, selected=categories[0], multiple=True, options={"maxItems": 3}),
+                    ui.output_ui("aggregate_switch_ui"),                    
                     ui.input_checkbox_group("input_region", "Regions", choices=regions, selected=regions, inline=False),
                     ui.input_radio_buttons("input_metric", "Primary Metric:", choices={"total_revenue": "Revenue ($)", "order_id": "Total Orders"}, selected="total_revenue", inline=True),
-                    ui.input_switch("input_aggregate", "Show Aggregate", value=False),
                     ui.input_switch("input_season", "Show Seasonality", value=True),
                     ui.input_action_button("reset_btn", "Reset All Filters", class_="btn-warning mt-2"),
                     width=260,
@@ -155,6 +155,17 @@ def server(input, output, session):
 
     # --- DASHBOARD LOGIC ---
 
+    @output
+    @render.ui
+    def aggregate_switch_ui():
+        # Read the current categories
+        cats = input.input_category()
+        
+        # Only render the switch if more than 1 category is selected
+        if cats is not None and len(cats) > 1:
+            return ui.input_switch("input_aggregate", "Show Aggregate", value=True)
+        return None
+    
     @reactive.effect
     @reactive.event(input.reset_btn)
     def _reset_filters():
