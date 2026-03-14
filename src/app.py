@@ -63,6 +63,7 @@ app_ui = ui.page_navbar(
                     ui.input_checkbox_group("input_region", "Regions", choices=regions, selected=regions, inline=False),
                     ui.input_radio_buttons("input_metric", "Primary Metric:", choices={"total_revenue": "Revenue ($)", "order_id": "Total Orders"}, selected="total_revenue", inline=True),
                     ui.input_switch("input_season", "Show Seasonality", value=True),
+                    # ui.input_action_button("apply_btn", "Apply Filters", class_="btn-success mt-2"),
                     ui.input_action_button("reset_btn", "Reset All Filters", class_="btn-warning mt-2"),
                     width=260,
                 ),
@@ -158,13 +159,25 @@ def server(input, output, session):
     @output
     @render.ui
     def aggregate_switch_ui():
-        # Read the current categories
-        cats = input.input_category()
+        categories = input.input_category() or []
         
-        # Only render the switch if more than 1 category is selected
-        if cats is not None and len(cats) > 1:
-            return ui.input_switch("input_aggregate", "Show Aggregate", value=True)
+        if len(categories) > 1:
+            return ui.input_switch("input_aggregate", "Show Aggregate", value=False)        
         return None
+    
+    # @reactive.calc
+    # @reactive.event(input.apply_btn, ignore_none=False) 
+    # def dashboard_filtered_df():
+    #     req(input.apply_btn()) 
+        
+    #     d = df.copy()
+    #     years = [int(y) for y in (input.input_year() or [])]
+    #     months = [int(m) for m in (input.input_month() or [])]
+    #     cats = input.input_category() or []
+    #     regs = input.input_region() or []
+        
+    #     if not (years and months and cats and regs): return d.iloc[0:0]
+    #     return d[d["order_date"].dt.year.isin(years) & d["order_date"].dt.month.isin(months) & d["product_category"].isin(cats) & d["customer_region"].isin(regs)]
     
     @reactive.effect
     @reactive.event(input.reset_btn)
@@ -213,12 +226,21 @@ def server(input, output, session):
         if d.empty: return px.line(title="No data").update_layout(template="plotly_white")
         info = m_info()
         d["month_start"] = d["order_date"].dt.to_period("M").dt.to_timestamp()
+
         grouped = d.groupby(["month_start", "product_category"], as_index=False).agg({info["id"]: info["agg_func"]})
         fig = px.line(grouped, x="month_start", y=info["id"], color="product_category", markers=True, template="plotly_white", labels=LABEL_MAP)
-        if input.input_aggregate():
+        
+        categories = input.input_category() or []
+        show_agg = (
+            len(categories) > 1
+            and "input_aggregate" in input
+            and input.input_aggregate()
+        )
+        if show_agg:
             agg = d.groupby("month_start", as_index=False).agg({info["id"]: info["agg_func"]})
             fig.add_scatter(x=agg["month_start"], y=agg[info["id"]], mode="lines+markers", name="Aggregate", line=dict(color="black", dash="dash"))
-        fig.update_layout(margin=dict(l=10, r=10, t=10, b=10), yaxis_title=info["label"], yaxis_tickformat=info["exact_format"])
+        
+        fig.update_layout(margin=dict(l=10, r=10, t=10, b=10), yaxis_title=info["label"], yaxis_tickformat=info["exact_format"], legend_title_text="Category")
         return fig
 
     @output 
