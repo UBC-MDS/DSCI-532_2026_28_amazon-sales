@@ -58,10 +58,10 @@ app_ui = ui.page_navbar(
                         choices={i: m for i, m in enumerate(["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], 1)},
                         multiple=True, selected=list(range(1, 13))
                     ),
-                    ui.input_selectize("input_category", "Categories (Max 3)", choices=categories, selected=categories[0], multiple=True, options={"maxItems": 3}),
+                    ui.input_selectize("input_category", "Categories (Max 3)", choices=categories, selected=categories[0:3], multiple=True, options={"maxItems": 3}),
                     ui.input_checkbox_group("input_region", "Regions", choices=regions, selected=regions, inline=False),
                     ui.input_radio_buttons("input_metric", "Primary Metric:", choices={"total_revenue": "Revenue ($)", "order_id": "Total Orders"}, selected="total_revenue", inline=True),
-                    ui.input_switch("input_aggregate", "Show Aggregate", value=False),
+                    ui.input_switch("input_aggregate", "Show Aggregate", value=True),
                     ui.input_switch("input_season", "Show Seasonality", value=True),
                     ui.input_action_button("reset_btn", "Reset All Filters", class_="btn-warning mt-2"),
                     width=260,
