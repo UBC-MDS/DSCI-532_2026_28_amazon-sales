@@ -213,32 +213,80 @@ def server(input, output, session):
     @output 
     @render_widget 
     def plot_map():
-        # Map ignores region sidebar for background view
+        # Map ignores region sidebar for background view calculation
         d_base = df.copy()
-        years, months, cats = [int(y) for y in (input.input_year() or [])], [int(m) for m in (input.input_month() or [])], input.input_category() or []
-        d_base = d_base[d_base["order_date"].dt.year.isin(years) & d_base["order_date"].dt.month.isin(months) & d_base["product_category"].isin(cats)]
+        years = [int(y) for y in (input.input_year() or [])]
+        months = [int(m) for m in (input.input_month() or [])]
+        cats = input.input_category() or []
+        
+        d_base = d_base[d_base["order_date"].dt.year.isin(years) & 
+                        d_base["order_date"].dt.month.isin(months) & 
+                        d_base["product_category"].isin(cats)]
+        
         info = m_info()
-        if d_base.empty: return px.choropleth(scope="world").update_layout(template="plotly_white")
-        summary = d_base.groupby("customer_region", as_index=False).agg({info["id"]: info["agg_func"]})
-        map_list = []
         selected_regs = list(input.input_region() or [])
-        for _, row in summary.iterrows():
-            reg = row["customer_region"]
-            val = row[info["id"]]
+        
+        # Aggregate the background data
+        if d_base.empty:
+            summary_dict = {}
+        else:
+            summary = d_base.groupby("customer_region", as_index=False).agg({info["id"]: info["agg_func"]})
+            # Convert to dictionary for easy lookup
+            summary_dict = dict(zip(summary["customer_region"], summary[info["id"]]))
+
+        map_list = []
+        
+        # Iterate over ALL globally defined regions so map shapes never disappear
+        for reg in regions:
+            # If region is selected, use actual data. If not, force to 0.
+            if reg in selected_regs:
+                val = summary_dict.get(reg, 0) # Get value, default to 0 if no sales
+            else:
+                val = 0
+                
+            # Format the tooltip value
             fmt_val = f"${val:,.0f}" if info["id"] == "total_revenue" else f"{val:,.0f}"
+            
+            # Map region to actual countries for the Choropleth
             if reg in REGION_COUNTRY_MAPPING:
                 for country in REGION_COUNTRY_MAPPING[reg]:
-                    map_list.append({"Country": country, "Region": reg, "FormattedValue": fmt_val, info["id"]: val})
-        if not map_list: return px.choropleth(scope="world").update_layout(template="plotly_white")
-        fig = px.choropleth(pd.DataFrame(map_list), locations="Country", locationmode="country names", color="Region", custom_data=["Region", "FormattedValue"], template="plotly_white", labels=LABEL_MAP)
+                    map_list.append({
+                        "Country": country, 
+                        "Region": reg, 
+                        "FormattedValue": fmt_val, 
+                        info["id"]: val
+                    })
+                    
+        if not map_list: 
+            return px.choropleth(scope="world").update_layout(template="plotly_white")
+            
+        fig = px.choropleth(
+            pd.DataFrame(map_list), 
+            locations="Country", 
+            locationmode="country names", 
+            color="Region", 
+            custom_data=["Region", "FormattedValue"], 
+            template="plotly_white", 
+            labels=LABEL_MAP
+        )
+        
         fig.update_traces(hovertemplate="<b>%{customdata[0]}</b><br>" + info["label"] + ": %{customdata[1]}<extra></extra>")
         fig.update_geos(showcountries=True, countrycolor="White", showocean=True, oceancolor="#E8F4F8", projection_type="equirectangular")
         fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, clickmode="event", showlegend=False, dragmode=False)
-        for trace in fig.data: trace.marker.opacity = 1.0 if trace.name in selected_regs else 0.2
+        
+        # Dim unselected regions
+        for trace in fig.data: 
+            trace.marker.opacity = 1.0 if trace.name in selected_regs else 0.2
+            
         fw = go.FigureWidget(fig)
+        
         def handle_click(trace, points, state):
-            if points.point_inds: clicked_region_state.set(trace.customdata[points.point_inds[0]][0])
-        for trace in fw.data: trace.on_click(handle_click)
+            if points.point_inds: 
+                clicked_region_state.set(trace.customdata[points.point_inds[0]][0])
+                
+        for trace in fw.data: 
+            trace.on_click(handle_click)
+            
         return fw
 
     @reactive.effect
