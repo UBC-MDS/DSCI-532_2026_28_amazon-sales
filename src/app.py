@@ -73,8 +73,8 @@ app_ui = ui.page_navbar(
                     ui.div(
                         ui.layout_columns(
                             ui.layout_columns(
-                                ui.card(ui.div(ui.strong("Total Revenue: "), ui.output_text("valuebox_revenue", inline=True)), class_="d-flex justify-content-center align-items-center bg-primary text-white fs-6 p-2 m-0 text-nowrap"),
-                                ui.card(ui.div(ui.strong("Total Orders: "), ui.output_text("valuebox_orders", inline=True)), class_="d-flex justify-content-center align-items-center bg-info text-white fs-6 p-2 m-0 text-nowrap"),
+                                ui.card(ui.output_ui("valuebox_revenue"),class_="d-flex justify-content-center align-items-center bg-primary text-white p-2 m-0"),
+                                ui.card(ui.output_ui("valuebox_orders"), class_="d-flex justify-content-center align-items-center bg-info text-white p-2 m-0"),
                                 ui.card(ui.output_ui("trend_header"), output_widget("plot_trend")),
                                 col_widths=(6, 6, 12), row_heights=["min-content", "1fr"], gap="10px", height="100%"
                             ),
@@ -186,14 +186,39 @@ def server(input, output, session):
         regs = input.input_region() or []
         if not (years and months and cats and regs): return d.iloc[0:0]
         return d[d["order_date"].dt.year.isin(years) & d["order_date"].dt.month.isin(months) & d["product_category"].isin(cats) & d["customer_region"].isin(regs)]
+    
 
-    @output 
-    @render.text
-    def valuebox_revenue(): return f"${dashboard_filtered_df()['total_revenue'].sum():,.0f}"
+    @output
+    @render.ui
+    def valuebox_revenue():
+        total_revenue = df["total_revenue"].sum()
+        filtered_revenue = dashboard_filtered_df()["total_revenue"].sum()
 
-    @output 
-    @render.text
-    def valuebox_orders(): return f"{dashboard_filtered_df()['order_id'].nunique():,}"
+        percent = (filtered_revenue / total_revenue) * 100 if total_revenue > 0 else 0
+
+        return ui.div(
+            ui.div("Total Revenue", class_="fw-bold text-center"),
+            ui.div(f"${total_revenue:,.0f}", class_="fw-bold text-center"),
+            ui.div(f"Filtered revenue: ${filtered_revenue:,.0f}", class_="small text-center"),
+            ui.div(f"{percent:.1f}% of total", class_="small text-center opacity-75"),
+            class_="d-flex flex-column justify-content-center align-items-center w-100",
+        )
+
+    @output
+    @render.ui
+    def valuebox_orders():
+        total_orders = df["order_id"].nunique()
+        filtered_orders = dashboard_filtered_df()["order_id"].nunique()
+
+        percent = (filtered_orders / total_orders) * 100 if total_orders > 0 else 0
+
+        return ui.div(
+            ui.div("Total Orders", class_="fw-bold text-center"),
+            ui.div(f"{total_orders:,}", class_="fw-bold text-center"),
+            ui.div(f"Filtered orders: {filtered_orders:,}", class_="small text-center"),
+            ui.div(f"{percent:.1f}% of total", class_="small text-center opacity-75"),
+            class_="d-flex flex-column justify-content-center align-items-center w-100",
+        )
 
     @output 
     @render_widget
