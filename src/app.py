@@ -28,6 +28,11 @@ PARQUET_PATH = Path(__file__).resolve().parent.parent / "data" / "processed" / "
 
 con = duckdb.connect()
 
+con.execute(f"""
+    CREATE OR REPLACE VIEW sales AS
+    SELECT * FROM read_parquet('{PARQUET_PATH.as_posix()}')
+""")
+
 df = con.execute(f"SELECT * FROM read_parquet('{PARQUET_PATH.as_posix()}')").df()
 df["total_revenue"] = pd.to_numeric(df["total_revenue"], errors="coerce").fillna(0)
 
@@ -212,6 +217,34 @@ def server(input, output, session):
             "short": "Revenue" if is_rev else "Orders",
             "agg_func": "sum" if is_rev else "nunique"
         }
+    
+    @reactive.calc
+    def dashboard_map_base_df():
+        years = [int(y) for y in (input.input_year() or [])]
+        months = [int(m) for m in (input.input_month() or [])]
+        cats = input.input_category() or []
+
+        if not (years and months and cats):
+            return pd.DataFrame(columns=[
+                "order_id", "order_date", "product_id", "product_category", "price",
+                "discount_percent", "quantity_sold", "customer_region",
+                "payment_method", "rating", "review_count", "discounted_price",
+                "total_revenue"
+            ])
+
+        years_sql = ",".join(map(str, years))
+        months_sql = ",".join(map(str, months))
+        cats_sql = ",".join(f"'{c}'" for c in cats)
+
+        query = f"""
+            SELECT *
+            FROM sales
+            WHERE year(order_date) IN ({years_sql})
+            AND month(order_date) IN ({months_sql})
+            AND product_category IN ({cats_sql})
+        """
+
+        return con.execute(query).df()
 
     @reactive.calc
     def dashboard_filtered_df():
@@ -235,7 +268,7 @@ def server(input, output, session):
 
         query = f"""
             SELECT *
-            FROM read_parquet('{PARQUET_PATH.as_posix()}')
+            FROM sales
             WHERE year(order_date) IN ({years_sql})
             AND month(order_date) IN ({months_sql})
             AND product_category IN ({cats_sql})
@@ -280,14 +313,7 @@ def server(input, output, session):
     @render_widget 
     def plot_map():
         # Map ignores region sidebar for background view calculation
-        d_base = df.copy()
-        years = [int(y) for y in (input.input_year() or [])]
-        months = [int(m) for m in (input.input_month() or [])]
-        cats = input.input_category() or []
-        
-        d_base = d_base[d_base["order_date"].dt.year.isin(years) & 
-                        d_base["order_date"].dt.month.isin(months) & 
-                        d_base["product_category"].isin(cats)]
+        d_base = dashboard_map_base_df()
         
         info = m_info()
         selected_regs = list(input.input_region() or [])
