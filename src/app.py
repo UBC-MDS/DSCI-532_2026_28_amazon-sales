@@ -10,15 +10,27 @@ from matplotlib.ticker import FuncFormatter
 import os
 import json
 import requests
+import duckdb
 
 # =============================================================================
 # 1. Data Loading and Preprocessing
 # =============================================================================
-DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "raw" / "amazon_sales_dataset.csv"
+#DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "raw" / "amazon_sales_dataset.csv"
 
 # Load and sanitize data
-df = pd.read_csv(DATA_PATH, parse_dates=["order_date"])
+#df = pd.read_csv(DATA_PATH, parse_dates=["order_date"])
+
+#df["total_revenue"] = pd.to_numeric(df["total_revenue"], errors="coerce").fillna(0)
+
+
+
+PARQUET_PATH = Path(__file__).resolve().parent.parent / "data" / "processed" / "amazon_sales.parquet"
+
+con = duckdb.connect()
+
+df = con.execute(f"SELECT * FROM read_parquet('{PARQUET_PATH.as_posix()}')").df()
 df["total_revenue"] = pd.to_numeric(df["total_revenue"], errors="coerce").fillna(0)
+
 
 min_year, max_year = int(df["order_date"].dt.year.min()), int(df["order_date"].dt.year.max())
 year_choices = [str(y) for y in range(min_year, max_year + 1)]
@@ -203,13 +215,34 @@ def server(input, output, session):
 
     @reactive.calc
     def dashboard_filtered_df():
-        d = df.copy()
         years = [int(y) for y in (input.input_year() or [])]
         months = [int(m) for m in (input.input_month() or [])]
         cats = input.input_category() or []
         regs = input.input_region() or []
-        if not (years and months and cats and regs): return d.iloc[0:0]
-        return d[d["order_date"].dt.year.isin(years) & d["order_date"].dt.month.isin(months) & d["product_category"].isin(cats) & d["customer_region"].isin(regs)]
+
+        if not (years and months and cats and regs):
+            return pd.DataFrame(columns=[
+                "order_id", "order_date", "product_id", "product_category", "price",
+                "discount_percent", "quantity_sold", "customer_region",
+                "payment_method", "rating", "review_count", "discounted_price",
+                "total_revenue"
+            ])
+
+        years_sql = ",".join(map(str, years))
+        months_sql = ",".join(map(str, months))
+        cats_sql = ",".join(f"'{c}'" for c in cats)
+        regs_sql = ",".join(f"'{r}'" for r in regs)
+
+        query = f"""
+            SELECT *
+            FROM read_parquet('{PARQUET_PATH.as_posix()}')
+            WHERE year(order_date) IN ({years_sql})
+            AND month(order_date) IN ({months_sql})
+            AND product_category IN ({cats_sql})
+            AND customer_region IN ({regs_sql})
+        """
+
+        return con.execute(query).df()
 
     @output 
     @render.text
