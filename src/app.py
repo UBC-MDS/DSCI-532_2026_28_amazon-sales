@@ -320,12 +320,12 @@ def server(input, output, session):
     @render_widget
     def plot_season():
         d = dashboard_filtered_df()
-        if d.empty: return px.line(title="No data").update_layout(template="plotly_white")
+        if d.empty: return px.bar(title="No data").update_layout(template="plotly_white")
         info, mapping = m_info(), {12: "Winter", 1: "Winter", 2: "Winter", 3: "Spring", 4: "Spring", 5: "Spring", 6: "Summer", 7: "Summer", 8: "Summer", 9: "Fall", 10: "Fall", 11: "Fall"}
         d["season"] = d["order_date"].dt.month.map(mapping)
         grouped = d.groupby(["season", "product_category"], as_index=False).agg({info["id"]: info["agg_func"]})
         grouped["season"] = pd.Categorical(grouped["season"], ["Spring", "Summer", "Fall", "Winter"], ordered=True)
-        fig = px.line(grouped.sort_values("season"), x="season", y=info["id"], color="product_category", markers=True, template="plotly_white", labels=LABEL_MAP)
+        fig = px.bar(grouped.sort_values("season"), x="season", y=info["id"], color="product_category",barmode="group", template="plotly_white", labels=LABEL_MAP)
         fig.update_yaxes(rangemode="normal") 
         fig.update_layout(margin=dict(l=10, r=10, t=10, b=10), yaxis_title=info["label"], yaxis_tickformat=info["exact_format"])
         return fig
