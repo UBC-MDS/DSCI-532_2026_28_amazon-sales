@@ -116,29 +116,68 @@ app_ui = ui.page_navbar(
         )
     ),
 
-    # --- TAB 2: AI ASSISTANT ---
-    ui.nav_panel(
-        "AI Assistant",
-        ui.page_fluid(
-            ui.h3("Ask the Data", class_="mt-3"),
-            ui.p("Use natural language to filter the dataset."),
-            ui.input_text_area("ai_query", "Your query", placeholder="Example: electronics orders in North America in 2023", rows=3),
+# --- TAB 2: AI ASSISTANT ---
+   
+
+ui.nav_panel(
+    "AI Assistant",
+    ui.page_fluid(
+        ui.h3("Ask the Data", class_="mt-3"),
+        ui.layout_columns(
             ui.div(
-                ui.input_action_button("run_ai_query", "Run Query", class_="btn-primary"), 
-                ui.download_button("download_ai_data", "Download CSV"), 
-                style="display: flex; gap: 10px;"
+                ui.card(
+                    ui.card_header("How to use the AI Assistant"),
+                    ui.tags.ul(
+                        ui.tags.li("Ask about categories, regions, years, and payment methods."),
+                        ui.tags.li("Supported filters include: product category, customer region, year, and payment method."),
+                        ui.tags.li("Example queries:"),
+                        ui.tags.ul(
+                            ui.tags.li("electronics in North America in 2023"),
+                            ui.tags.li("beauty orders in Europe"),
+                            ui.tags.li("credit card purchases in 2022"),
+                            ui.tags.li("fashion in Asia paid with UPI"),
+                        ),
+                    ),
+                ),
+                ui.br(),
+                ui.card(
+                    ui.card_header("Conversation"),
+                    ui.div(
+                        ui.output_ui("ai_chat_history"),
+                        style="height: 320px; overflow-y: auto; padding: 10px;",
+                    ),
+                ),
+                ui.br(),
+                ui.input_text_area(
+                    "ai_query",
+                    "Message",
+                    placeholder="Ask about categories, regions, years, or payment methods...",
+                    rows=2,
+                ),
+                ui.div(
+                    ui.input_action_button("run_ai_query", "Send", class_="btn-primary"),
+                    ui.download_button("download_ai_data", "Download CSV"),
+                    style="display: flex; gap: 10px;",
+                ),
             ),
-            ui.br(), ui.output_text("ai_status"), ui.hr(),
-            ui.h4("Filtered Dataframe"),
-            ui.output_data_frame("ai_filtered_table"),
-            ui.hr(),
-            ui.layout_columns(
-                ui.card(ui.card_header("Revenue Trend by Category"), ui.output_plot("ai_plot_trend")),
-                ui.card(ui.card_header("Average Revenue by Season"), ui.output_plot("ai_plot_season")),
-                col_widths=(6, 6)
+            ui.div(
+                ui.output_text("ai_status"),
+                ui.hr(),
+                ui.h4("Filtered Dataframe"),
+                ui.output_data_frame("ai_filtered_table"),
+                ui.hr(),
+                ui.layout_columns(
+                    ui.card(ui.card_header("Revenue Trend by Category"), ui.output_plot("ai_plot_trend")),
+                    ui.card(ui.card_header("Average Revenue by Season"), ui.output_plot("ai_plot_season")),
+                    col_widths=(6, 6),
+                ),
             ),
-        )
+            col_widths=(2, 10),
+            gap="20px",
+        ),
     ),
+),
+
     title="Amazon Sales Dashboard",
     fillable=True,
 )
@@ -152,6 +191,7 @@ def server(input, output, session):
     clicked_region_state = reactive.Value(None)
     ai_df_store = reactive.Value(df.copy())
     ai_status_store = reactive.Value("Waiting for a query.")
+    ai_chat_store = reactive.Value([])
 
     # --- DASHBOARD LOGIC ---
 
@@ -304,40 +344,189 @@ def server(input, output, session):
 
     # --- AI ASSISTANT LOGIC (Full Integration) ---
 
-    def parse_query_rule_based(query: str):
-        query = query.lower().strip()
-        f = {"categories": [], "regions": [], "years": [], "payment_methods": []}
-        words = set(query.replace(",", " ").split())
-        for cat in categories:
-            if cat.lower() in query or any(w in words for w in cat.lower().split()): f["categories"].append(cat)
-        for reg in regions:
-            if reg.lower() in query: f["regions"].append(reg)
-        for yr in range(min_year, max_year + 1):
-            if str(yr) in query: f["years"].append(yr)
-        p_methods = sorted(df["payment_method"].dropna().unique().tolist())
-        for pm in p_methods:
-            if pm.lower() in query: f["payment_methods"].append(pm)
-        return f
+    def parse_query_github_models(query: str):
+        token = os.getenv("GITHUB_TOKEN")
+
+        if not token:
+            raise ValueError("GITHUB_TOKEN is not set.")
+
+        url = "https://models.inference.ai.azure.com/chat/completions"
+
+        system_prompt = """
+        You convert user queries into dataset filters.
+
+        Return valid JSON only with exactly this schema:
+        {
+        "categories": [],
+        "regions": [],
+        "years": [],
+        "payment_methods": []
+        }
+
+        Rules:
+        - categories must come only from the dataset categories
+        - regions must come only from the dataset regions
+        - years must be integers
+        - payment_methods must come only from the dataset payment methods
+        - if something is not mentioned, return an empty list
+        - do not include explanations
+        - do not include markdown
+        """
+
+        payment_methods = sorted(df["payment_method"].dropna().unique().tolist())
+
+        user_prompt = f"""
+        Dataset categories: {categories}
+        Dataset regions: {regions}
+        Dataset payment methods: {payment_methods}
+        Valid years: {list(range(min_year, max_year + 1))}
+
+        User query: {query}
+        """
+
+        payload = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            "temperature": 0,
+            "max_tokens": 200
+        }
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}"
+        }
+
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        response.raise_for_status()
+
+        result = response.json()
+        content = result["choices"][0]["message"]["content"].strip()
+
+        try:
+            filters = json.loads(content)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Model returned invalid JSON: {content}") from e
+
+        return {
+            "categories": filters.get("categories", []),
+            "regions": filters.get("regions", []),
+            "years": filters.get("years", []),
+            "payment_methods": filters.get("payment_methods", []),
+        }
 
     @reactive.effect
     @reactive.event(input.run_ai_query)
     def _run_ai_logic():
         query = input.ai_query().strip()
+
         if not query:
             ai_df_store.set(df.copy())
             ai_status_store.set("Showing full dataset.")
+            ui.update_text_area("ai_query", value="")
             return
-        
-        # You can toggle between parse_query_github_models(query) or rule_based here
-        filters = parse_query_rule_based(query)
+
+        history = list(ai_chat_store())
+        history.append({"role": "user", "text": query})
+
+        try:
+            filters = parse_query_github_models(query)
+        except Exception as e:
+            ai_df_store.set(df.iloc[0:0].copy())
+            ai_status_store.set(f"LLM error: {str(e)}")
+            history.append({"role": "assistant", "text": f"I could not parse your query because of an LLM error: {str(e)}"})
+            ai_chat_store.set(history)
+            ui.update_text_area("ai_query", value="")
+            return
+
         d_ai = df.copy()
-        if filters["years"]: d_ai = d_ai[d_ai["order_date"].dt.year.isin(filters["years"])]
-        if filters["categories"]: d_ai = d_ai[d_ai["product_category"].isin(filters["categories"])]
-        if filters["regions"]: d_ai = d_ai[d_ai["customer_region"].isin(filters["regions"])]
-        if filters["payment_methods"]: d_ai = d_ai[d_ai["payment_method"].isin(filters["payment_methods"])]
-        
+
+        if filters["years"]:
+            d_ai = d_ai[d_ai["order_date"].dt.year.isin(filters["years"])]
+
+        if filters["categories"]:
+            d_ai = d_ai[d_ai["product_category"].isin(filters["categories"])]
+
+        if filters["regions"]:
+            d_ai = d_ai[d_ai["customer_region"].isin(filters["regions"])]
+
+        if filters["payment_methods"]:
+            d_ai = d_ai[d_ai["payment_method"].isin(filters["payment_methods"])]
+
         ai_df_store.set(d_ai)
+
+        detected_parts = []
+        if filters["categories"]:
+            detected_parts.append(f"categories={', '.join(filters['categories'])}")
+        if filters["regions"]:
+            detected_parts.append(f"regions={', '.join(filters['regions'])}")
+        if filters["years"]:
+            detected_parts.append(f"years={', '.join(map(str, filters['years']))}")
+        if filters["payment_methods"]:
+            detected_parts.append(f"payment_methods={', '.join(filters['payment_methods'])}")
+
+        if not detected_parts:
+            ai_status_store.set("No recognizable filters found in query.")
+            history.append({
+                "role": "assistant",
+                "text": "I could not identify supported filters in your query. Try mentioning a category, region, year, or payment method."
+            })
+            ai_chat_store.set(history)
+            ui.update_text_area("ai_query", value="")
+            return
+
+        if d_ai.empty:
+            ai_status_store.set("No matching records found.")
+            history.append({
+                "role": "assistant",
+                "text": f"I interpreted your query using {', '.join(detected_parts)}, but no matching records were found."
+            })
+            ai_chat_store.set(history)
+            ui.update_text_area("ai_query", value="")
+            return
+
         ai_status_store.set(f"Found {len(d_ai):,} matches.")
+        history.append({
+            "role": "assistant",
+            "text": f"I interpreted your query using {', '.join(detected_parts)} and found {len(d_ai):,} matching rows."
+        })
+        ai_chat_store.set(history)
+        ui.update_text_area("ai_query", value="")
+
+    @output
+    @render.ui
+    def ai_chat_history():
+        history = ai_chat_store()
+
+        if not history:
+            return ui.div(
+                "No conversation yet. Try a query like 'electronics in North America in 2023'.",
+                class_="text-muted"
+            )
+
+        items = []
+        for msg in history:
+            if msg["role"] == "user":
+                items.append(
+                    ui.div(
+                        ui.strong("You: "),
+                        msg["text"],
+                        class_="p-2 mb-2 rounded bg-light border"
+                    )
+                )
+            else:
+                items.append(
+                    ui.div(
+                        ui.strong("Assistant: "),
+                        msg["text"],
+                        class_="p-2 mb-2 rounded",
+                        style="background-color: #eef6ff; border: 1px solid #cfe2ff;"
+                    )
+                )
+
+        return ui.TagList(*items)
 
     @output 
     @render.text
