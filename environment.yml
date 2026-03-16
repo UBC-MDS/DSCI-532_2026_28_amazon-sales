@@ -1,9 +1,10 @@
 name: amazon-sales-dashboard
+
 channels:
   - conda-forge
+
 dependencies:
   - python=3.11
-  - pip
   - pandas
   - numpy
   - matplotlib
@@ -19,8 +20,8 @@ dependencies:
   - jupyterlab
   - ipykernel
   - requests
-  - pip:
-      - shiny
-      - pytest
-      - pytest-playwright
-      - playwright
+  - duckdb
+  - pyarrow
+  - pytest
+  - pytest-playwright
+  - playwright
