@@ -10,15 +10,32 @@ from matplotlib.ticker import FuncFormatter
 import os
 import json
 import requests
+import duckdb
 
 # =============================================================================
 # 1. Data Loading and Preprocessing
 # =============================================================================
-DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "raw" / "amazon_sales_dataset.csv"
+#DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "raw" / "amazon_sales_dataset.csv"
 
 # Load and sanitize data
-df = pd.read_csv(DATA_PATH, parse_dates=["order_date"])
+#df = pd.read_csv(DATA_PATH, parse_dates=["order_date"])
+
+#df["total_revenue"] = pd.to_numeric(df["total_revenue"], errors="coerce").fillna(0)
+
+
+
+PARQUET_PATH = Path(__file__).resolve().parent.parent / "data" / "processed" / "amazon_sales.parquet"
+
+con = duckdb.connect()
+
+con.execute(f"""
+    CREATE OR REPLACE VIEW sales AS
+    SELECT * FROM read_parquet('{PARQUET_PATH.as_posix()}')
+""")
+
+df = con.execute(f"SELECT * FROM read_parquet('{PARQUET_PATH.as_posix()}')").df()
 df["total_revenue"] = pd.to_numeric(df["total_revenue"], errors="coerce").fillna(0)
+
 
 min_year, max_year = int(df["order_date"].dt.year.min()), int(df["order_date"].dt.year.max())
 year_choices = [str(y) for y in range(min_year, max_year + 1)]
@@ -41,6 +58,17 @@ LABEL_MAP = {
     "order_id": "Total Orders",
     "customer_region": "Region"
 }
+
+def get_metric_info(metric):
+    """Return display and aggregation settings for the selected metric."""
+    is_rev = metric == "total_revenue"
+    return {
+        "id": metric,
+        "label": "Revenue ($)" if is_rev else "Total Orders",
+        "exact_format": "$,.0f" if is_rev else ",.0f",
+        "short": "Revenue" if is_rev else "Orders",
+        "agg_func": "sum" if is_rev else "nunique"
+    }
 
 # =============================================================================
 # 2. User Interface (UI) Definition
@@ -229,28 +257,69 @@ def server(input, output, session):
         ui.update_radio_buttons("input_metric", selected="total_revenue")
         ui.update_switch("input_aggregate", value=False)
         ui.update_switch("input_season", value=True)
-
+    
     @reactive.calc
     def m_info():
-        is_rev = input.input_metric() == "total_revenue"
-        return {
-            "id": input.input_metric(),
-            "label": "Revenue ($)" if is_rev else "Total Orders",
-            "exact_format": "$,.0f" if is_rev else ",.0f",
-            "short": "Revenue" if is_rev else "Orders",
-            "agg_func": "sum" if is_rev else "nunique"
-        }
+        return get_metric_info(input.input_metric())
+    
+    @reactive.calc
+    def dashboard_map_base_df():
+        years = [int(y) for y in (input.input_year() or [])]
+        months = [int(m) for m in (input.input_month() or [])]
+        cats = input.input_category() or []
+
+        if not (years and months and cats):
+            return pd.DataFrame(columns=[
+                "order_id", "order_date", "product_id", "product_category", "price",
+                "discount_percent", "quantity_sold", "customer_region",
+                "payment_method", "rating", "review_count", "discounted_price",
+                "total_revenue"
+            ])
+
+        years_sql = ",".join(map(str, years))
+        months_sql = ",".join(map(str, months))
+        cats_sql = ",".join(f"'{c}'" for c in cats)
+
+        query = f"""
+            SELECT *
+            FROM sales
+            WHERE year(order_date) IN ({years_sql})
+            AND month(order_date) IN ({months_sql})
+            AND product_category IN ({cats_sql})
+        """
+
+        return con.execute(query).df()
 
     @reactive.calc
     def dashboard_filtered_df():
-        d = df.copy()
         years = [int(y) for y in (input.input_year() or [])]
         months = [int(m) for m in (input.input_month() or [])]
         cats = input.input_category() or []
         regs = input.input_region() or []
-        if not (years and months and cats and regs): return d.iloc[0:0]
-        return d[d["order_date"].dt.year.isin(years) & d["order_date"].dt.month.isin(months) & d["product_category"].isin(cats) & d["customer_region"].isin(regs)]
-    
+
+        if not (years and months and cats and regs):
+            return pd.DataFrame(columns=[
+                "order_id", "order_date", "product_id", "product_category", "price",
+                "discount_percent", "quantity_sold", "customer_region",
+                "payment_method", "rating", "review_count", "discounted_price",
+                "total_revenue"
+            ])
+
+        years_sql = ",".join(map(str, years))
+        months_sql = ",".join(map(str, months))
+        cats_sql = ",".join(f"'{c}'" for c in cats)
+        regs_sql = ",".join(f"'{r}'" for r in regs)
+
+        query = f"""
+            SELECT *
+            FROM sales
+            WHERE year(order_date) IN ({years_sql})
+            AND month(order_date) IN ({months_sql})
+            AND product_category IN ({cats_sql})
+            AND customer_region IN ({regs_sql})
+        """
+
+        return con.execute(query).df()
 
     @output
     @render.ui
@@ -312,14 +381,7 @@ def server(input, output, session):
     @render_widget 
     def plot_map():
         # Map ignores region sidebar for background view calculation
-        d_base = df.copy()
-        years = [int(y) for y in (input.input_year() or [])]
-        months = [int(m) for m in (input.input_month() or [])]
-        cats = input.input_category() or []
-        
-        d_base = d_base[d_base["order_date"].dt.year.isin(years) & 
-                        d_base["order_date"].dt.month.isin(months) & 
-                        d_base["product_category"].isin(cats)]
+        d_base = dashboard_map_base_df()
         
         info = m_info()
         selected_regs = list(input.input_region() or [])
