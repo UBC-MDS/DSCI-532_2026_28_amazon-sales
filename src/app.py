@@ -196,8 +196,8 @@ ui.nav_panel(
                 ui.output_data_frame("ai_filtered_table"),
                 ui.hr(),
                 ui.layout_columns(
-                    ui.card(ui.card_header("Revenue Trend by Category"), ui.output_plot("ai_plot_trend")),
-                    ui.card(ui.card_header("Average Revenue by Season"), ui.output_plot("ai_plot_season")),
+                    ui.card(ui.card_header("Revenue Trend by Category"), output_widget("ai_plot_trend")),
+                    ui.card(ui.card_header("Average Revenue by Season"), output_widget("ai_plot_season")),
                     col_widths=(6, 6),
                 ),
             ),
@@ -683,28 +683,87 @@ def server(input, output, session):
     def download_ai_data(): yield ai_df_store().to_csv(index=False)
 
     @output 
-    @render.plot
+    @render_widget
     def ai_plot_trend():
         d = ai_df_store()
-        fig, ax = plt.subplots(figsize=(6, 4))
-        if d.empty: return fig
-        d["m"] = d["order_date"].dt.to_period("M").dt.to_timestamp()
-        d.groupby(["m", "product_category"])["total_revenue"].sum().unstack().fillna(0).plot(ax=ax, marker='o')
-        ax.set_ylabel("Revenue ($)")
-        ax.yaxis.set_major_formatter(FuncFormatter(lambda x, p: f"${x:,.0f}"))
+        
+        if d.empty:
+            fig = px.line(title="No data available")
+            fig.update_layout(template="plotly_white")
+            return fig
+
+        d["month_start"] = d["order_date"].dt.to_period("M").dt.to_timestamp()
+
+        grouped = (
+            d.groupby(["month_start", "product_category"], as_index=False)["total_revenue"]
+            .sum()
+        )
+
+        fig = px.line(
+            grouped,
+            x="month_start",
+            y="total_revenue",
+            color="product_category",
+            markers=True,
+            template="plotly_white",
+            labels=LABEL_MAP,
+        )
+
+        fig.update_layout(
+            margin=dict(l=10, r=10, t=10, b=10),
+            yaxis_title="Revenue ($)",
+            yaxis_tickformat="$,.0f",
+            legend_title_text="Category",
+        )
+
         return fig
 
     @output 
-    @render.plot
+    @render_widget
     def ai_plot_season():
         d = ai_df_store()
-        fig, ax = plt.subplots(figsize=(6, 4))
-        if d.empty: return fig
-        m = d["order_date"].dt.month
-        d["season"] = np.select([m.isin([12,1,2]), m.isin([3,4,5]), m.isin([6,7,8])], ["Winter", "Spring", "Summer"], default="Fall")
-        d.groupby(["season", "product_category"])["total_revenue"].mean().unstack().fillna(0).plot(kind='bar', ax=ax)
-        ax.set_ylabel("Avg Revenue ($)")
-        ax.yaxis.set_major_formatter(FuncFormatter(lambda x, p: f"${x:,.0f}"))
+        if d.empty:
+            fig = px.bar(title="No data available")
+            fig.update_layout(template="plotly_white")
+            return fig
+
+        season_map = {
+            12: "Winter", 1: "Winter", 2: "Winter",
+            3: "Spring", 4: "Spring", 5: "Spring",
+            6: "Summer", 7: "Summer", 8: "Summer",
+            9: "Fall", 10: "Fall", 11: "Fall"
+        }
+
+        d["season"] = d["order_date"].dt.month.map(season_map)
+
+        grouped = (
+            d.groupby(["season", "product_category"], as_index=False)["total_revenue"]
+            .mean()
+        )
+
+        grouped["season"] = pd.Categorical(
+            grouped["season"],
+            categories=["Spring", "Summer", "Fall", "Winter"],
+            ordered=True
+        )
+
+        fig = px.bar(
+            grouped.sort_values("season"),
+            x="season",
+            y="total_revenue",
+            color="product_category",
+            barmode="group",
+            template="plotly_white",
+            labels=LABEL_MAP,
+        )
+
+        fig.update_layout(
+            margin=dict(l=10, r=10, t=10, b=10),
+            yaxis_title="Average Revenue ($)",
+            yaxis_tickformat="$,.0f",
+            legend_title_text="Category",
+        )
+
         return fig
 
     # Titles
