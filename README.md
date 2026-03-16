@@ -85,12 +85,10 @@ Simply visit the **stable deployment link** above to explore the dashboard (No i
 
 ### Running Tests
 
-This project includes both unit tests and Playwright UI tests.
-
-Run all tests from the repository root with:
-    ```bash
+This project includes both unit tests and Playwright UI tests. Run all tests from the repository root with:
+ ```bash
     pytest
-    ```
+ ```
 
 For contribution guidelines and development workflow details, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
