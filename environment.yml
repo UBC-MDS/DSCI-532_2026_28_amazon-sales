@@ -21,3 +21,6 @@ dependencies:
   - requests
   - pip:
       - shiny
+      - pytest
+      - pytest-playwright
+      - playwright
