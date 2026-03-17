@@ -22,3 +22,6 @@ dependencies:
   - requests
   - duckdb
   - pyarrow
+  - pytest
+  - pytest-playwright
+  - playwright
