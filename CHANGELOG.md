@@ -44,19 +44,27 @@ This release introduces an interactive map feature where users can click on a re
 - **Option chosen:** D (Component click event interaction)
 - **PR:** Implemented during Milestone 3 as part of dashboard interaction development (no dedicated PR)
 - **Why this option over the others:** This option directly improves user interaction within the dashboard by turning a visualization into an input mechanism, making exploration more intuitive without adding additional UI complexity
+- **Feature prioritization issue link:** #
 
 ### Collaboration
-- **CONTRIBUTING.md:** Updated via PR to include M3 retrospective and M4 workflow improvements
+- **CONTRIBUTING.md:** Updated via [PR](https://github.com/UBC-MDS/DSCI-532_2026_28_amazon-sales/pull/116) to include M3 retrospective and M4 workflow improvements
 - **M3 retrospective:** The team experienced issues merging from `dev` to `main`, which caused delays and highlighted the need for a more structured workflow
 - **M4:** Adopted feature branches, scoped pull requests, peer reviews, and issue-based task tracking to improve coordination and reduce merge conflicts
 
 ### Reflection
+**What the dashboard does well**
 - Transitioning to DuckDB significantly improved scalability and performance by pushing filtering logic into the query layer
 - Implementing Playwright tests improved confidence in UI behavior and ensured core interactions worked as expected
-- Organizing peer feedback into structured GitHub issues improved team coordination and clarity of implementation
 - Introducing interactive map filtering enhanced user experience by enabling intuitive geographic exploration
 - Improving the AI Assistant interface (including scrollable chat history) enhanced usability and made interactions more intuitive
+- Organizing peer feedback into structured GitHub issues improved team coordination and clarity of implementation
+
+**Current limitations**
+- Some reactive components (e.g., map and sidebar filters) may briefly appear out of sync due to the absence of an "Apply" mechanism for filters
+
+**Trade-offs and learning**
 - Trade-off: Prioritized critical feedback affecting usability and correctness, while deferring minor UI enhancements due to time constraints
+- Most useful learning: Concepts from reactive programming and dashboard design (DSCI 531) were particularly valuable in structuring the app logic and ensuring consistent interactions across components
 - Updating the collaboration workflow [CONTRIBUTING.md](CONTRIBUTING.md) helped reduce merge conflicts and improved team efficiency
 
 ## [0.3.0] - 2026-03-08
