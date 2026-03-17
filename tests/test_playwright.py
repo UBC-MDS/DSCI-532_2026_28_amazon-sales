@@ -8,13 +8,18 @@ APP_PATH = Path(__file__).resolve().parents[1] / "src" / "app.py"
 app = create_app_fixture(APP_PATH)
 
 def get_checked_values(page: Page, input_name: str) -> list[str]:
-    """Return the currently selected values of a checkbox group input."""
+    """get_metric_info returns correct configuration for revenue metric.
+    This test checks returned fields and values; 
+    it would fail if metric mapping or formatting logic changes."""
     return page.locator(f'input[name="{input_name}"]:checked').evaluate_all(
         "els => els.map(el => el.value)"
     )
     
 def test_year_filter_selection_changes(page: Page, app: ShinyAppProc) -> None:
-    """Selecting a single year updates the year checkbox selection."""
+    """Selecting a year updates the checkbox selection state.
+    This test checks that only the selected year is active; 
+    it would fail if input binding or UI state syncing breaks."""
+
     page.goto(app.url)
 
     year_input = controller.InputCheckboxGroup(page, "input_year")
@@ -26,7 +31,10 @@ def test_year_filter_selection_changes(page: Page, app: ShinyAppProc) -> None:
 
 
 def test_region_filter_updates_dashboard_outputs(page: Page, app: ShinyAppProc) -> None:
-    """Selecting one region limits the dashboard summaries to the chosen region."""
+    """Selecting one region updates dashboard outputs (revenue and orders) to reflect that region only.
+    This test checks that value boxes change after selection; 
+    it would fail if filtering logic or reactive outputs break."""
+
     page.goto(app.url)
 
     region_input = controller.InputCheckboxGroup(page, "input_region")
@@ -42,7 +50,9 @@ def test_region_filter_updates_dashboard_outputs(page: Page, app: ShinyAppProc) 
     expect(orders_box).not_to_have_text(orders_before)
 
 def test_season_switch_toggle(page: Page, app: ShinyAppProc) -> None:
-    """The season switch input can be toggled on and off."""
+    """The season switch can toggle between on and off states.
+    This test checks the switch state updates correctly; 
+    it would fail if input control or state binding breaks."""
     page.goto(app.url)
 
     season_input = controller.InputSwitch(page, "input_season")
@@ -54,7 +64,9 @@ def test_season_switch_toggle(page: Page, app: ShinyAppProc) -> None:
     season_input.expect_checked(True)
 
 def test_metric_filter_updates_selection(page: Page, app: ShinyAppProc) -> None:
-    """Selecting a different metric updates the radio button input."""
+    """Selecting a different metric updates the radio button selection.
+    This test checks that the selected metric changes correctly; 
+    it would fail if input control or selection logic breaks."""
     page.goto(app.url)
 
     metric_input = controller.InputRadioButtons(page, "input_metric")
@@ -64,7 +76,9 @@ def test_metric_filter_updates_selection(page: Page, app: ShinyAppProc) -> None:
     metric_input.expect_selected("order_id")
 
 def test_reset_button_restores_defaults(page: Page, app: ShinyAppProc) -> None:
-    """Clicking reset restores year and region filters to default selections."""
+    """Clicking reset restores filters to their default selections.
+    This test checks that year and region inputs return to default values; 
+    it would fail if reset logic or default state handling breaks."""
     page.goto(app.url)
 
     year_input = controller.InputCheckboxGroup(page, "input_year")
@@ -82,7 +96,9 @@ def test_reset_button_restores_defaults(page: Page, app: ShinyAppProc) -> None:
     assert "Asia" in regions
 
 def test_metric_change_updates_valuebox(page: Page, app: ShinyAppProc) -> None:
-    """Changing the metric updates the value box output."""
+    """Changing the metric updates the value box output.
+    This test checks that displayed values change when metric changes; 
+    it would fail if aggregation or reactive rendering breaks."""
     page.goto(app.url)
 
     metric_input = controller.InputRadioButtons(page, "input_metric")
