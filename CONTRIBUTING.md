@@ -28,3 +28,17 @@ abide by its terms.
 
 ### Attribution
 These contributing guidelines was adapted from the the [dplyr contributing guidelines](https://github.com/tidyverse/dplyr/blob/master/.github/CONTRIBUTING.md).
+
+## M3 Retrospective and M4 Workflow Improvements
+
+During Milestone 3, our team experienced issues merging changes from the `dev` branch into `main`, which led to delays during submission. Based on this experience, we refined our collaboration workflow for Milestone 4.
+
+For Milestone 4, we adopted the following improvements:
+
+- All work was done on feature branches instead of directly on shared branches
+- Changes were merged via pull requests with at least one peer review
+- Tasks were broken down into smaller, well-defined GitHub issues
+- Peer feedback was tracked, prioritized, and implemented through issues
+- Better coordination was maintained when merging to avoid conflicts
+
+These changes improved our development process, reduced merge conflicts, and helped ensure smoother collaboration across the team.
