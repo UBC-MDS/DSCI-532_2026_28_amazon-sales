@@ -1,4 +1,4 @@
-from shiny import App, ui, reactive, render
+from shiny import App, ui, reactive, render, req
 from shinywidgets import output_widget, render_widget
 import pandas as pd
 from pathlib import Path
@@ -10,15 +10,32 @@ from matplotlib.ticker import FuncFormatter
 import os
 import json
 import requests
+import duckdb
 
 # =============================================================================
 # 1. Data Loading and Preprocessing
 # =============================================================================
-DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "raw" / "amazon_sales_dataset.csv"
+#DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "raw" / "amazon_sales_dataset.csv"
 
 # Load and sanitize data
-df = pd.read_csv(DATA_PATH, parse_dates=["order_date"])
+#df = pd.read_csv(DATA_PATH, parse_dates=["order_date"])
+
+#df["total_revenue"] = pd.to_numeric(df["total_revenue"], errors="coerce").fillna(0)
+
+
+
+PARQUET_PATH = Path(__file__).resolve().parent.parent / "data" / "processed" / "amazon_sales.parquet"
+
+con = duckdb.connect()
+
+con.execute(f"""
+    CREATE OR REPLACE VIEW sales AS
+    SELECT * FROM read_parquet('{PARQUET_PATH.as_posix()}')
+""")
+
+df = con.execute(f"SELECT * FROM read_parquet('{PARQUET_PATH.as_posix()}')").df()
 df["total_revenue"] = pd.to_numeric(df["total_revenue"], errors="coerce").fillna(0)
+
 
 min_year, max_year = int(df["order_date"].dt.year.min()), int(df["order_date"].dt.year.max())
 year_choices = [str(y) for y in range(min_year, max_year + 1)]
@@ -42,6 +59,17 @@ LABEL_MAP = {
     "customer_region": "Region"
 }
 
+def get_metric_info(metric):
+    """Return display and aggregation settings for the selected metric."""
+    is_rev = metric == "total_revenue"
+    return {
+        "id": metric,
+        "label": "Revenue ($)" if is_rev else "Total Orders",
+        "exact_format": "$,.0f" if is_rev else ",.0f",
+        "short": "Revenue" if is_rev else "Orders",
+        "agg_func": "sum" if is_rev else "nunique"
+    }
+
 # =============================================================================
 # 2. User Interface (UI) Definition
 # =============================================================================
@@ -58,11 +86,12 @@ app_ui = ui.page_navbar(
                         choices={i: m for i, m in enumerate(["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], 1)},
                         multiple=True, selected=list(range(1, 13))
                     ),
-                    ui.input_selectize("input_category", "Categories (Max 3)", choices=categories, selected=categories[0], multiple=True, options={"maxItems": 3}),
+                    ui.input_selectize("input_category", "Categories (Max 3)", choices=categories, selected=categories[0:3], multiple=True, options={"maxItems": 3}),
+                    ui.output_ui("aggregate_switch_ui"),                    
                     ui.input_checkbox_group("input_region", "Regions", choices=regions, selected=regions, inline=False),
                     ui.input_radio_buttons("input_metric", "Primary Metric:", choices={"total_revenue": "Revenue ($)", "order_id": "Total Orders"}, selected="total_revenue", inline=True),
-                    ui.input_switch("input_aggregate", "Show Aggregate", value=False),
                     ui.input_switch("input_season", "Show Seasonality", value=True),
+                    # ui.input_action_button("apply_btn", "Apply Filters", class_="btn-success mt-2"),
                     ui.input_action_button("reset_btn", "Reset All Filters", class_="btn-warning mt-2"),
                     width=260,
                 ),
@@ -73,8 +102,8 @@ app_ui = ui.page_navbar(
                     ui.div(
                         ui.layout_columns(
                             ui.layout_columns(
-                                ui.card(ui.div(ui.strong("Total Revenue: "), ui.output_text("valuebox_revenue", inline=True)), class_="d-flex justify-content-center align-items-center bg-primary text-white fs-6 p-2 m-0 text-nowrap"),
-                                ui.card(ui.div(ui.strong("Total Orders: "), ui.output_text("valuebox_orders", inline=True)), class_="d-flex justify-content-center align-items-center bg-info text-white fs-6 p-2 m-0 text-nowrap"),
+                                ui.card(ui.output_ui("valuebox_revenue"),class_="d-flex justify-content-center align-items-center bg-primary text-white p-2 m-0"),
+                                ui.card(ui.output_ui("valuebox_orders"), class_="d-flex justify-content-center align-items-center bg-info text-white p-2 m-0"),
                                 ui.card(ui.output_ui("trend_header"), output_widget("plot_trend")),
                                 col_widths=(6, 6, 12), row_heights=["min-content", "1fr"], gap="10px", height="100%"
                             ),
@@ -116,29 +145,85 @@ app_ui = ui.page_navbar(
         )
     ),
 
-    # --- TAB 2: AI ASSISTANT ---
-    ui.nav_panel(
-        "AI Assistant",
-        ui.page_fluid(
-            ui.h3("Ask the Data", class_="mt-3"),
-            ui.p("Use natural language to filter the dataset."),
-            ui.input_text_area("ai_query", "Your query", placeholder="Example: electronics orders in North America in 2023", rows=3),
+# --- TAB 2: AI ASSISTANT ---
+   
+
+ui.nav_panel(
+    "AI Assistant",
+    ui.page_fluid(
+        ui.h3("Ask the Data", class_="mt-3"),
+        ui.layout_columns(
             ui.div(
-                ui.input_action_button("run_ai_query", "Run Query", class_="btn-primary"), 
-                ui.download_button("download_ai_data", "Download CSV"), 
-                style="display: flex; gap: 10px;"
+                ui.card(
+                    ui.card_header("How to use the AI Assistant"),
+                    ui.tags.ul(
+                        ui.tags.li("Ask about categories, regions, years, and payment methods."),
+                        ui.tags.li("Supported filters include: product category, customer region, year, and payment method."),
+                        ui.tags.li("Example queries:"),
+                        ui.tags.ul(
+                            ui.tags.li("electronics in North America in 2023"),
+                            ui.tags.li("beauty orders in Europe"),
+                            ui.tags.li("credit card purchases in 2022"),
+                            ui.tags.li("fashion in Asia paid with UPI"),
+                        ),
+                    ),
+                ),
+                ui.br(),
+                ui.card(
+                    ui.card_header("Conversation"),
+                    ui.div(
+                        ui.output_ui("ai_chat_history"),
+                        id="ai-chat-container",
+                        style="height: 320px; overflow-y: auto; padding: 10px;",
+                    ),
+                ),
+                ui.br(),
+                ui.input_text_area(
+                    "ai_query",
+                    "Message",
+                    placeholder="Ask about categories, regions, years, or payment methods...",
+                    rows=2,
+                ),
+                ui.div(
+                    ui.input_action_button("run_ai_query", "Send", class_="btn-primary"),
+                    ui.download_button("download_ai_data", "Download CSV"),
+                    style="display: flex; gap: 10px;",
+                ),
             ),
-            ui.br(), ui.output_text("ai_status"), ui.hr(),
-            ui.h4("Filtered Dataframe"),
-            ui.output_data_frame("ai_filtered_table"),
-            ui.hr(),
-            ui.layout_columns(
-                ui.card(ui.card_header("Revenue Trend by Category"), ui.output_plot("ai_plot_trend")),
-                ui.card(ui.card_header("Average Revenue by Season"), ui.output_plot("ai_plot_season")),
-                col_widths=(6, 6)
+            ui.div(
+                ui.output_text("ai_status"),
+                ui.hr(),
+                ui.h4("Filtered Dataframe"),
+                ui.output_data_frame("ai_filtered_table"),
+                ui.hr(),
+                ui.layout_columns(
+                    ui.card(ui.card_header("Revenue Trend by Category"), output_widget("ai_plot_trend")),
+                    ui.card(ui.card_header("Average Revenue by Season"), output_widget("ai_plot_season")),
+                    col_widths=(6, 6),
+                ),
             ),
-        )
+            col_widths=(2, 10),
+            gap="20px",
+        ),
+        ui.tags.script("""
+            document.addEventListener("DOMContentLoaded", () => {
+            const chatBox = document.getElementById("ai-chat-container");
+            if (!chatBox) return;
+
+            const observer = new MutationObserver(() => {
+                chatBox.scrollTop = chatBox.scrollHeight;
+            });
+
+            observer.observe(chatBox, {
+                childList: true,
+                subtree: true
+            });
+            });
+            """
+        ),
     ),
+),
+
     title="Amazon Sales Dashboard",
     fillable=True,
 )
@@ -152,48 +237,138 @@ def server(input, output, session):
     clicked_region_state = reactive.Value(None)
     ai_df_store = reactive.Value(df.copy())
     ai_status_store = reactive.Value("Waiting for a query.")
+    ai_chat_store = reactive.Value([])
 
     # --- DASHBOARD LOGIC ---
 
+    @output
+    @render.ui
+    def aggregate_switch_ui():
+        categories = input.input_category() or []
+        
+        if len(categories) > 1:
+            return ui.input_switch("input_aggregate", "Show Aggregate", value=False)        
+        return None
+    
+    # @reactive.calc
+    # @reactive.event(input.apply_btn, ignore_none=False) 
+    # def dashboard_filtered_df():
+    #     req(input.apply_btn()) 
+        
+    #     d = df.copy()
+    #     years = [int(y) for y in (input.input_year() or [])]
+    #     months = [int(m) for m in (input.input_month() or [])]
+    #     cats = input.input_category() or []
+    #     regs = input.input_region() or []
+        
+    #     if not (years and months and cats and regs): return d.iloc[0:0]
+    #     return d[d["order_date"].dt.year.isin(years) & d["order_date"].dt.month.isin(months) & d["product_category"].isin(cats) & d["customer_region"].isin(regs)]
+    
     @reactive.effect
     @reactive.event(input.reset_btn)
     def _reset_filters():
         ui.update_checkbox_group("input_year", selected=year_choices)
         ui.update_selectize("input_month", selected=list(range(1, 13)))
-        ui.update_selectize("input_category", selected=[categories[0]])
+        ui.update_selectize("input_category", selected=categories[0:3])
         ui.update_checkbox_group("input_region", selected=regions)
         ui.update_radio_buttons("input_metric", selected="total_revenue")
         ui.update_switch("input_aggregate", value=False)
         ui.update_switch("input_season", value=True)
-
+    
     @reactive.calc
     def m_info():
-        is_rev = input.input_metric() == "total_revenue"
-        return {
-            "id": input.input_metric(),
-            "label": "Revenue ($)" if is_rev else "Total Orders",
-            "exact_format": "$,.0f" if is_rev else ",.0f",
-            "short": "Revenue" if is_rev else "Orders",
-            "agg_func": "sum" if is_rev else "nunique"
-        }
+        return get_metric_info(input.input_metric())
+    
+    @reactive.calc
+    def dashboard_map_base_df():
+        years = [int(y) for y in (input.input_year() or [])]
+        months = [int(m) for m in (input.input_month() or [])]
+        cats = input.input_category() or []
+
+        if not (years and months and cats):
+            return pd.DataFrame(columns=[
+                "order_id", "order_date", "product_id", "product_category", "price",
+                "discount_percent", "quantity_sold", "customer_region",
+                "payment_method", "rating", "review_count", "discounted_price",
+                "total_revenue"
+            ])
+
+        years_sql = ",".join(map(str, years))
+        months_sql = ",".join(map(str, months))
+        cats_sql = ",".join(f"'{c}'" for c in cats)
+
+        query = f"""
+            SELECT *
+            FROM sales
+            WHERE year(order_date) IN ({years_sql})
+            AND month(order_date) IN ({months_sql})
+            AND product_category IN ({cats_sql})
+        """
+
+        return con.execute(query).df()
 
     @reactive.calc
     def dashboard_filtered_df():
-        d = df.copy()
         years = [int(y) for y in (input.input_year() or [])]
         months = [int(m) for m in (input.input_month() or [])]
         cats = input.input_category() or []
         regs = input.input_region() or []
-        if not (years and months and cats and regs): return d.iloc[0:0]
-        return d[d["order_date"].dt.year.isin(years) & d["order_date"].dt.month.isin(months) & d["product_category"].isin(cats) & d["customer_region"].isin(regs)]
 
-    @output 
-    @render.text
-    def valuebox_revenue(): return f"${dashboard_filtered_df()['total_revenue'].sum():,.0f}"
+        if not (years and months and cats and regs):
+            return pd.DataFrame(columns=[
+                "order_id", "order_date", "product_id", "product_category", "price",
+                "discount_percent", "quantity_sold", "customer_region",
+                "payment_method", "rating", "review_count", "discounted_price",
+                "total_revenue"
+            ])
 
-    @output 
-    @render.text
-    def valuebox_orders(): return f"{dashboard_filtered_df()['order_id'].nunique():,}"
+        years_sql = ",".join(map(str, years))
+        months_sql = ",".join(map(str, months))
+        cats_sql = ",".join(f"'{c}'" for c in cats)
+        regs_sql = ",".join(f"'{r}'" for r in regs)
+
+        query = f"""
+            SELECT *
+            FROM sales
+            WHERE year(order_date) IN ({years_sql})
+            AND month(order_date) IN ({months_sql})
+            AND product_category IN ({cats_sql})
+            AND customer_region IN ({regs_sql})
+        """
+
+        return con.execute(query).df()
+
+    @output
+    @render.ui
+    def valuebox_revenue():
+        total_revenue = df["total_revenue"].sum()
+        filtered_revenue = dashboard_filtered_df()["total_revenue"].sum()
+
+        percent = (filtered_revenue / total_revenue) * 100 if total_revenue > 0 else 0
+
+        return ui.div(
+            ui.div("Total Revenue", class_="fw-bold text-center"),
+            ui.div(f"${total_revenue:,.0f}", class_="fw-bold text-center"),
+            ui.div(f"Filtered revenue: ${filtered_revenue:,.0f}", class_="small text-center"),
+            ui.div(f"{percent:.1f}% of total", class_="small text-center opacity-75"),
+            class_="d-flex flex-column justify-content-center align-items-center w-100",
+        )
+
+    @output
+    @render.ui
+    def valuebox_orders():
+        total_orders = df["order_id"].nunique()
+        filtered_orders = dashboard_filtered_df()["order_id"].nunique()
+
+        percent = (filtered_orders / total_orders) * 100 if total_orders > 0 else 0
+
+        return ui.div(
+            ui.div("Total Orders", class_="fw-bold text-center"),
+            ui.div(f"{total_orders:,}", class_="fw-bold text-center"),
+            ui.div(f"Filtered orders: {filtered_orders:,}", class_="small text-center"),
+            ui.div(f"{percent:.1f}% of total", class_="small text-center opacity-75"),
+            class_="d-flex flex-column justify-content-center align-items-center w-100",
+        )
 
     @output 
     @render_widget
@@ -202,43 +377,93 @@ def server(input, output, session):
         if d.empty: return px.line(title="No data").update_layout(template="plotly_white")
         info = m_info()
         d["month_start"] = d["order_date"].dt.to_period("M").dt.to_timestamp()
+
         grouped = d.groupby(["month_start", "product_category"], as_index=False).agg({info["id"]: info["agg_func"]})
         fig = px.line(grouped, x="month_start", y=info["id"], color="product_category", markers=True, template="plotly_white", labels=LABEL_MAP)
-        if input.input_aggregate():
+        
+        categories = input.input_category() or []
+        show_agg = (
+            len(categories) > 1
+            and "input_aggregate" in input
+            and input.input_aggregate()
+        )
+        if show_agg:
             agg = d.groupby("month_start", as_index=False).agg({info["id"]: info["agg_func"]})
             fig.add_scatter(x=agg["month_start"], y=agg[info["id"]], mode="lines+markers", name="Aggregate", line=dict(color="black", dash="dash"))
-        fig.update_layout(margin=dict(l=10, r=10, t=10, b=10), yaxis_title=info["label"], yaxis_tickformat=info["exact_format"])
+        
+        fig.update_layout(margin=dict(l=10, r=10, t=10, b=10), yaxis_title=info["label"], yaxis_tickformat=info["exact_format"], legend_title_text="Category")
         return fig
 
     @output 
     @render_widget 
     def plot_map():
-        # Map ignores region sidebar for background view
-        d_base = df.copy()
-        years, months, cats = [int(y) for y in (input.input_year() or [])], [int(m) for m in (input.input_month() or [])], input.input_category() or []
-        d_base = d_base[d_base["order_date"].dt.year.isin(years) & d_base["order_date"].dt.month.isin(months) & d_base["product_category"].isin(cats)]
+        # Map ignores region sidebar for background view calculation
+        d_base = dashboard_map_base_df()
+        
         info = m_info()
-        if d_base.empty: return px.choropleth(scope="world").update_layout(template="plotly_white")
-        summary = d_base.groupby("customer_region", as_index=False).agg({info["id"]: info["agg_func"]})
-        map_list = []
         selected_regs = list(input.input_region() or [])
-        for _, row in summary.iterrows():
-            reg = row["customer_region"]
-            val = row[info["id"]]
+        
+        # Aggregate the background data
+        if d_base.empty:
+            summary_dict = {}
+        else:
+            summary = d_base.groupby("customer_region", as_index=False).agg({info["id"]: info["agg_func"]})
+            # Convert to dictionary for easy lookup
+            summary_dict = dict(zip(summary["customer_region"], summary[info["id"]]))
+
+        map_list = []
+        
+        # Iterate over ALL globally defined regions so map shapes never disappear
+        for reg in regions:
+            # If region is selected, use actual data. If not, force to 0.
+            if reg in selected_regs:
+                val = summary_dict.get(reg, 0) # Get value, default to 0 if no sales
+            else:
+                val = 0
+                
+            # Format the tooltip value
             fmt_val = f"${val:,.0f}" if info["id"] == "total_revenue" else f"{val:,.0f}"
+            
+            # Map region to actual countries for the Choropleth
             if reg in REGION_COUNTRY_MAPPING:
                 for country in REGION_COUNTRY_MAPPING[reg]:
-                    map_list.append({"Country": country, "Region": reg, "FormattedValue": fmt_val, info["id"]: val})
-        if not map_list: return px.choropleth(scope="world").update_layout(template="plotly_white")
-        fig = px.choropleth(pd.DataFrame(map_list), locations="Country", locationmode="country names", color="Region", custom_data=["Region", "FormattedValue"], template="plotly_white", labels=LABEL_MAP)
+                    map_list.append({
+                        "Country": country, 
+                        "Region": reg, 
+                        "FormattedValue": fmt_val, 
+                        info["id"]: val
+                    })
+                    
+        if not map_list: 
+            return px.choropleth(scope="world").update_layout(template="plotly_white")
+            
+        fig = px.choropleth(
+            pd.DataFrame(map_list), 
+            locations="Country", 
+            locationmode="country names", 
+            color="Region", 
+            custom_data=["Region", "FormattedValue"], 
+            template="plotly_white", 
+            labels=LABEL_MAP
+        )
+        
         fig.update_traces(hovertemplate="<b>%{customdata[0]}</b><br>" + info["label"] + ": %{customdata[1]}<extra></extra>")
         fig.update_geos(showcountries=True, countrycolor="White", showocean=True, oceancolor="#E8F4F8", projection_type="equirectangular")
         fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, clickmode="event", showlegend=False, dragmode=False)
-        for trace in fig.data: trace.marker.opacity = 1.0 if trace.name in selected_regs else 0.2
+        
+        # Dim unselected regions
+        for trace in fig.data: 
+            trace.marker.opacity = 1.0 if trace.name in selected_regs else 0.2
+            
         fw = go.FigureWidget(fig)
+        
         def handle_click(trace, points, state):
-            if points.point_inds: clicked_region_state.set(trace.customdata[points.point_inds[0]][0])
-        for trace in fw.data: trace.on_click(handle_click)
+            if points.point_inds: 
+                clicked_region_state.set(trace.customdata[points.point_inds[0]][0])
+                
+        for trace in fw.data: 
+            trace.on_click(handle_click)
+            
         return fw
 
     @reactive.effect
@@ -255,12 +480,12 @@ def server(input, output, session):
     @render_widget
     def plot_season():
         d = dashboard_filtered_df()
-        if d.empty: return px.line(title="No data").update_layout(template="plotly_white")
+        if d.empty: return px.bar(title="No data").update_layout(template="plotly_white")
         info, mapping = m_info(), {12: "Winter", 1: "Winter", 2: "Winter", 3: "Spring", 4: "Spring", 5: "Spring", 6: "Summer", 7: "Summer", 8: "Summer", 9: "Fall", 10: "Fall", 11: "Fall"}
         d["season"] = d["order_date"].dt.month.map(mapping)
         grouped = d.groupby(["season", "product_category"], as_index=False).agg({info["id"]: info["agg_func"]})
         grouped["season"] = pd.Categorical(grouped["season"], ["Spring", "Summer", "Fall", "Winter"], ordered=True)
-        fig = px.line(grouped.sort_values("season"), x="season", y=info["id"], color="product_category", markers=True, template="plotly_white", labels=LABEL_MAP)
+        fig = px.bar(grouped.sort_values("season"), x="season", y=info["id"], color="product_category",barmode="group", template="plotly_white", labels=LABEL_MAP)
         fig.update_yaxes(rangemode="normal") 
         fig.update_layout(margin=dict(l=10, r=10, t=10, b=10), yaxis_title=info["label"], yaxis_tickformat=info["exact_format"])
         return fig
@@ -279,40 +504,189 @@ def server(input, output, session):
 
     # --- AI ASSISTANT LOGIC (Full Integration) ---
 
-    def parse_query_rule_based(query: str):
-        query = query.lower().strip()
-        f = {"categories": [], "regions": [], "years": [], "payment_methods": []}
-        words = set(query.replace(",", " ").split())
-        for cat in categories:
-            if cat.lower() in query or any(w in words for w in cat.lower().split()): f["categories"].append(cat)
-        for reg in regions:
-            if reg.lower() in query: f["regions"].append(reg)
-        for yr in range(min_year, max_year + 1):
-            if str(yr) in query: f["years"].append(yr)
-        p_methods = sorted(df["payment_method"].dropna().unique().tolist())
-        for pm in p_methods:
-            if pm.lower() in query: f["payment_methods"].append(pm)
-        return f
+    def parse_query_github_models(query: str):
+        token = os.getenv("GITHUB_TOKEN")
+
+        if not token:
+            raise ValueError("GITHUB_TOKEN is not set.")
+
+        url = "https://models.inference.ai.azure.com/chat/completions"
+
+        system_prompt = """
+        You convert user queries into dataset filters.
+
+        Return valid JSON only with exactly this schema:
+        {
+        "categories": [],
+        "regions": [],
+        "years": [],
+        "payment_methods": []
+        }
+
+        Rules:
+        - categories must come only from the dataset categories
+        - regions must come only from the dataset regions
+        - years must be integers
+        - payment_methods must come only from the dataset payment methods
+        - if something is not mentioned, return an empty list
+        - do not include explanations
+        - do not include markdown
+        """
+
+        payment_methods = sorted(df["payment_method"].dropna().unique().tolist())
+
+        user_prompt = f"""
+        Dataset categories: {categories}
+        Dataset regions: {regions}
+        Dataset payment methods: {payment_methods}
+        Valid years: {list(range(min_year, max_year + 1))}
+
+        User query: {query}
+        """
+
+        payload = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            "temperature": 0,
+            "max_tokens": 200
+        }
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}"
+        }
+
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        response.raise_for_status()
+
+        result = response.json()
+        content = result["choices"][0]["message"]["content"].strip()
+
+        try:
+            filters = json.loads(content)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Model returned invalid JSON: {content}") from e
+
+        return {
+            "categories": filters.get("categories", []),
+            "regions": filters.get("regions", []),
+            "years": filters.get("years", []),
+            "payment_methods": filters.get("payment_methods", []),
+        }
 
     @reactive.effect
     @reactive.event(input.run_ai_query)
     def _run_ai_logic():
         query = input.ai_query().strip()
+
         if not query:
             ai_df_store.set(df.copy())
             ai_status_store.set("Showing full dataset.")
+            ui.update_text_area("ai_query", value="")
             return
-        
-        # You can toggle between parse_query_github_models(query) or rule_based here
-        filters = parse_query_rule_based(query)
+
+        history = list(ai_chat_store())
+        history.append({"role": "user", "text": query})
+
+        try:
+            filters = parse_query_github_models(query)
+        except Exception as e:
+            ai_df_store.set(df.iloc[0:0].copy())
+            ai_status_store.set(f"LLM error: {str(e)}")
+            history.append({"role": "assistant", "text": f"I could not parse your query because of an LLM error: {str(e)}"})
+            ai_chat_store.set(history)
+            ui.update_text_area("ai_query", value="")
+            return
+
         d_ai = df.copy()
-        if filters["years"]: d_ai = d_ai[d_ai["order_date"].dt.year.isin(filters["years"])]
-        if filters["categories"]: d_ai = d_ai[d_ai["product_category"].isin(filters["categories"])]
-        if filters["regions"]: d_ai = d_ai[d_ai["customer_region"].isin(filters["regions"])]
-        if filters["payment_methods"]: d_ai = d_ai[d_ai["payment_method"].isin(filters["payment_methods"])]
-        
+
+        if filters["years"]:
+            d_ai = d_ai[d_ai["order_date"].dt.year.isin(filters["years"])]
+
+        if filters["categories"]:
+            d_ai = d_ai[d_ai["product_category"].isin(filters["categories"])]
+
+        if filters["regions"]:
+            d_ai = d_ai[d_ai["customer_region"].isin(filters["regions"])]
+
+        if filters["payment_methods"]:
+            d_ai = d_ai[d_ai["payment_method"].isin(filters["payment_methods"])]
+
         ai_df_store.set(d_ai)
+
+        detected_parts = []
+        if filters["categories"]:
+            detected_parts.append(f"categories={', '.join(filters['categories'])}")
+        if filters["regions"]:
+            detected_parts.append(f"regions={', '.join(filters['regions'])}")
+        if filters["years"]:
+            detected_parts.append(f"years={', '.join(map(str, filters['years']))}")
+        if filters["payment_methods"]:
+            detected_parts.append(f"payment_methods={', '.join(filters['payment_methods'])}")
+
+        if not detected_parts:
+            ai_status_store.set("No recognizable filters found in query.")
+            history.append({
+                "role": "assistant",
+                "text": "I could not identify supported filters in your query. Try mentioning a category, region, year, or payment method."
+            })
+            ai_chat_store.set(history)
+            ui.update_text_area("ai_query", value="")
+            return
+
+        if d_ai.empty:
+            ai_status_store.set("No matching records found.")
+            history.append({
+                "role": "assistant",
+                "text": f"I interpreted your query using {', '.join(detected_parts)}, but no matching records were found."
+            })
+            ai_chat_store.set(history)
+            ui.update_text_area("ai_query", value="")
+            return
+
         ai_status_store.set(f"Found {len(d_ai):,} matches.")
+        history.append({
+            "role": "assistant",
+            "text": f"I interpreted your query using {', '.join(detected_parts)} and found {len(d_ai):,} matching rows."
+        })
+        ai_chat_store.set(history)
+        ui.update_text_area("ai_query", value="")
+
+    @output
+    @render.ui
+    def ai_chat_history():
+        history = ai_chat_store()
+
+        if not history:
+            return ui.div(
+                "No conversation yet. Try a query like 'electronics in North America in 2023'.",
+                class_="text-muted"
+            )
+
+        items = []
+        for msg in history:
+            if msg["role"] == "user":
+                items.append(
+                    ui.div(
+                        ui.strong("You: "),
+                        msg["text"],
+                        class_="p-2 mb-2 rounded bg-light border"
+                    )
+                )
+            else:
+                items.append(
+                    ui.div(
+                        ui.strong("Assistant: "),
+                        msg["text"],
+                        class_="p-2 mb-2 rounded",
+                        style="background-color: #eef6ff; border: 1px solid #cfe2ff;"
+                    )
+                )
+
+        return ui.TagList(*items)
 
     @output 
     @render.text
@@ -326,28 +700,87 @@ def server(input, output, session):
     def download_ai_data(): yield ai_df_store().to_csv(index=False)
 
     @output 
-    @render.plot
+    @render_widget
     def ai_plot_trend():
         d = ai_df_store()
-        fig, ax = plt.subplots(figsize=(6, 4))
-        if d.empty: return fig
-        d["m"] = d["order_date"].dt.to_period("M").dt.to_timestamp()
-        d.groupby(["m", "product_category"])["total_revenue"].sum().unstack().fillna(0).plot(ax=ax, marker='o')
-        ax.set_ylabel("Revenue ($)")
-        ax.yaxis.set_major_formatter(FuncFormatter(lambda x, p: f"${x:,.0f}"))
+        
+        if d.empty:
+            fig = px.line(title="No data available")
+            fig.update_layout(template="plotly_white")
+            return fig
+
+        d["month_start"] = d["order_date"].dt.to_period("M").dt.to_timestamp()
+
+        grouped = (
+            d.groupby(["month_start", "product_category"], as_index=False)["total_revenue"]
+            .sum()
+        )
+
+        fig = px.line(
+            grouped,
+            x="month_start",
+            y="total_revenue",
+            color="product_category",
+            markers=True,
+            template="plotly_white",
+            labels=LABEL_MAP,
+        )
+
+        fig.update_layout(
+            margin=dict(l=10, r=10, t=10, b=10),
+            yaxis_title="Revenue ($)",
+            yaxis_tickformat="$,.0f",
+            legend_title_text="Category",
+        )
+
         return fig
 
     @output 
-    @render.plot
+    @render_widget
     def ai_plot_season():
         d = ai_df_store()
-        fig, ax = plt.subplots(figsize=(6, 4))
-        if d.empty: return fig
-        m = d["order_date"].dt.month
-        d["season"] = np.select([m.isin([12,1,2]), m.isin([3,4,5]), m.isin([6,7,8])], ["Winter", "Spring", "Summer"], default="Fall")
-        d.groupby(["season", "product_category"])["total_revenue"].mean().unstack().fillna(0).plot(kind='bar', ax=ax)
-        ax.set_ylabel("Avg Revenue ($)")
-        ax.yaxis.set_major_formatter(FuncFormatter(lambda x, p: f"${x:,.0f}"))
+        if d.empty:
+            fig = px.bar(title="No data available")
+            fig.update_layout(template="plotly_white")
+            return fig
+
+        season_map = {
+            12: "Winter", 1: "Winter", 2: "Winter",
+            3: "Spring", 4: "Spring", 5: "Spring",
+            6: "Summer", 7: "Summer", 8: "Summer",
+            9: "Fall", 10: "Fall", 11: "Fall"
+        }
+
+        d["season"] = d["order_date"].dt.month.map(season_map)
+
+        grouped = (
+            d.groupby(["season", "product_category"], as_index=False)["total_revenue"]
+            .mean()
+        )
+
+        grouped["season"] = pd.Categorical(
+            grouped["season"],
+            categories=["Spring", "Summer", "Fall", "Winter"],
+            ordered=True
+        )
+
+        fig = px.bar(
+            grouped.sort_values("season"),
+            x="season",
+            y="total_revenue",
+            color="product_category",
+            barmode="group",
+            template="plotly_white",
+            labels=LABEL_MAP,
+        )
+
+        fig.update_layout(
+            margin=dict(l=10, r=10, t=10, b=10),
+            yaxis_title="Average Revenue ($)",
+            yaxis_tickformat="$,.0f",
+            legend_title_text="Category",
+        )
+
         return fig
 
     # Titles

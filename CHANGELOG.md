@@ -1,3 +1,72 @@
+## [0.4.0] - 2026-03-17
+
+### Added
+- Integrated DuckDB to execute filtered queries directly on Parquet data
+- Converted dataset from CSV to Parquet format to improve performance and reduce I/O overhead
+- Implemented interactive map feature where clicking a region dynamically filters the dashboard
+- Added Playwright tests to validate key user interactions, including:
+  - year filter selection
+  - region filtering impact on dashboard outputs
+  - season toggle behavior
+  - metric selection updates
+  - reset button restoring defaults
+  - value box updates on metric change
+- Added pytest unit tests for `get_metric_info` to validate:
+  - correct configuration for revenue and order metrics
+  - presence of required keys
+  - fallback behavior for unknown metrics
+
+### Changed
+- Refactored dashboard filtering logic to use DuckDB queries instead of pandas filtering
+- Updated environment configuration (`environment.yml`) to include DuckDB and Parquet dependencies
+- Improved AI Assistant interface by adding scrollable chat history and clearer conversation display
+- Improved map logic to ensure consistent rendering of all regions and allow interaction-based filtering
+- Updated [CONTRIBUTING.md](CONTRIBUTING.md) with M3 retrospective and M4 collaboration improvements
+- Addressed peer feedback from 4 reviewers by creating and prioritizing GitHub issues (M4 Feedback Prioritization), including improvements to:
+  - bar chart readability (grouped bars instead of stacked where appropriate)
+  - handling of empty filtered datasets across visualizations
+  - UI clarity and labeling
+  - overall dashboard usability and consistency
+
+### Fixed
+- Fixed issues with empty dataset handling causing plots to break
+- Fixed inconsistencies in region filtering between map and dashboard outputs
+
+- **Feedback prioritization issue link:**  [#105](https://github.com/UBC-MDS/DSCI-532_2026_28_amazon-sales/issues/105)
+
+### Known Issues
+- Map selection and sidebar filters may briefly appear out of sync until all reactive components update; an optional "Apply" button for filters (suggested by instructor) could improve synchronization.
+
+### Release Highlight: Interactive Map Filtering
+
+This release introduces an interactive map feature where users can click on a region to dynamically filter the entire dashboard. This improves usability by enabling intuitive geographic exploration and tighter integration between visual components.
+
+- **Option chosen:** D (Component click event interaction)
+- **PR:** Implemented during Milestone 3 as part of dashboard interaction development (no dedicated PR)
+- **Why this option over the others:** This option directly improves user interaction within the dashboard by turning a visualization into an input mechanism, making exploration more intuitive without adding additional UI complexity
+- **Feature prioritization issue link:**  [#120](https://github.com/UBC-MDS/DSCI-532_2026_28_amazon-sales/issues/120)
+
+### Collaboration
+- **CONTRIBUTING.md:** Updated via [PR](https://github.com/UBC-MDS/DSCI-532_2026_28_amazon-sales/pull/116) to include M3 retrospective and M4 workflow improvements
+- **M3 retrospective:** The team experienced issues merging from `dev` to `main`, which caused delays and highlighted the need for a more structured workflow
+- **M4:** Adopted feature branches, scoped pull requests, peer reviews, and issue-based task tracking to improve coordination and reduce merge conflicts
+
+### Reflection
+**What the dashboard does well**
+- Transitioning to DuckDB significantly improved scalability and performance by pushing filtering logic into the query layer
+- Implementing Playwright tests improved confidence in UI behavior and ensured core interactions worked as expected
+- Introducing interactive map filtering enhanced user experience by enabling intuitive geographic exploration
+- Improving the AI Assistant interface (including scrollable chat history) enhanced usability and made interactions more intuitive
+- Organizing peer feedback into structured GitHub issues improved team coordination and clarity of implementation
+
+**Current limitations**
+- Some reactive components (e.g., map and sidebar filters) may briefly appear out of sync due to the absence of an "Apply" mechanism for filters
+
+**Trade-offs and learning**
+- Trade-off: Prioritized critical feedback affecting usability and correctness, while deferring minor UI enhancements due to time constraints
+- Most useful learning: Concepts from reactive programming and dashboard design (DSCI 531) were particularly valuable in structuring the app logic and ensuring consistent interactions across components
+- Updating the collaboration workflow [CONTRIBUTING.md](CONTRIBUTING.md) helped reduce merge conflicts and improved team efficiency
+
 ## [0.3.0] - 2026-03-08
 
 ### Added
