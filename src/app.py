@@ -173,6 +173,7 @@ ui.nav_panel(
                     ui.card_header("Conversation"),
                     ui.div(
                         ui.output_ui("ai_chat_history"),
+                        id="ai-chat-container",
                         style="height: 320px; overflow-y: auto; padding: 10px;",
                     ),
                 ),
@@ -203,6 +204,22 @@ ui.nav_panel(
             ),
             col_widths=(2, 10),
             gap="20px",
+        ),
+        ui.tags.script("""
+            document.addEventListener("DOMContentLoaded", () => {
+            const chatBox = document.getElementById("ai-chat-container");
+            if (!chatBox) return;
+
+            const observer = new MutationObserver(() => {
+                chatBox.scrollTop = chatBox.scrollHeight;
+            });
+
+            observer.observe(chatBox, {
+                childList: true,
+                subtree: true
+            });
+            });
+            """
         ),
     ),
 ),
