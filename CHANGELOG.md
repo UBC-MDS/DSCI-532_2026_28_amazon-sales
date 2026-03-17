@@ -44,7 +44,7 @@ This release introduces an interactive map feature where users can click on a re
 - **Option chosen:** D (Component click event interaction)
 - **PR:** Implemented during Milestone 3 as part of dashboard interaction development (no dedicated PR)
 - **Why this option over the others:** This option directly improves user interaction within the dashboard by turning a visualization into an input mechanism, making exploration more intuitive without adding additional UI complexity
-- **Feature prioritization issue link:** [#120](https://github.com/UBC-MDS/DSCI-532_2026_28_amazon-sales/issues/120)
+- **Feature prioritization issue link:**  [#120](https://github.com/UBC-MDS/DSCI-532_2026_28_amazon-sales/issues/120)
 
 ### Collaboration
 - **CONTRIBUTING.md:** Updated via [PR](https://github.com/UBC-MDS/DSCI-532_2026_28_amazon-sales/pull/116) to include M3 retrospective and M4 workflow improvements
